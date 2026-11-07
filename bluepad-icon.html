@@ -1,0 +1,451 @@
+<!doctype html>
+<!--
+  THROWAWAY PROTOTYPE — answers wayfinder ticket
+  "Prototype: BluePad icon and splash concept drafts"
+  (acheronian/webos-bluepad#14). Never ship this file; the winning concept
+  gets redrawn as real PNG assets for appinfo, the rest stays on the
+  prototype branch.
+
+  Question: which icon and splash art ships as BluePad's public identity?
+  Direction (locked in "Grilling: App identity and branding", #9): flat,
+  dark background, blue accent, gamepad silhouette + Bluetooth rune,
+  device-agnostic (Xbox pads in scope). Palette from the UI prototype (#8):
+  brand ground #0b1738, accent #5b8dff.
+
+  Plan: three structurally different concepts, switchable via the floating
+  bar or ←/→, each shown across the full appinfo set — icon.png 130×130,
+  icon_large.png 320×320, small-size legibility, launcher context,
+  splash.png, iconColor.
+
+    A "Solid glyph"      pad as a relief silhouette, rune overlaid in accent
+    B "Full-bleed mass"  the pad IS the icon: oversized accent mass, rune knocked in
+    C "Line mark"        pad as a hairline outline, rune contained inside
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<title>BluePad icon &amp; splash concepts (THROWAWAY) — webos-bluepad#14</title>
+<style>
+  :root {
+    --ground: #0b1738;
+    --deep: #05081c;
+    --accent: #5b8dff;
+    --ink: #ffffff;
+    --ink-2: rgba(255, 255, 255, 0.62);
+    --ink-3: rgba(255, 255, 255, 0.38);
+    --hairline: rgba(255, 255, 255, 0.14);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--deep);
+    color: var(--ink);
+    font-family: 'Geist', 'Geist UI', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    padding: 40px 32px 120px;
+  }
+  .wrap { max-width: 1060px; margin: 0 auto; }
+
+  header { margin-bottom: 36px; }
+  header .kicker { color: var(--accent); font-size: 12px; letter-spacing: 0.18em;
+    text-transform: uppercase; margin-bottom: 10px; }
+  header h1 { font-size: 26px; font-weight: 650; letter-spacing: -0.01em; }
+  header p { color: var(--ink-2); font-size: 14px; line-height: 1.6; margin-top: 10px; max-width: 74ch; }
+  header p code, .asset-label code { color: var(--ink); background: rgba(255,255,255,0.08);
+    padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+
+  .variant { display: none; }
+  .variant.active { display: block; }
+  .variant > h2 { font-size: 18px; font-weight: 650; margin-bottom: 4px; }
+  .variant > .gist { color: var(--ink-2); font-size: 14px; line-height: 1.6; margin-bottom: 26px; max-width: 78ch; }
+
+  .panel { background: rgba(255,255,255,0.04); border: 1px solid var(--hairline);
+    border-radius: 14px; padding: 26px; margin-bottom: 22px; }
+  .panel h3 { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ink-3); margin-bottom: 18px; font-weight: 600; }
+
+  .hero-row { display: flex; gap: 36px; align-items: flex-start; flex-wrap: wrap; }
+  .icon-slot { text-align: center; }
+  .icon-slot .frame { background: rgba(255,255,255,0.05); border: 1px solid var(--hairline);
+    border-radius: 10px; padding: 10px; display: inline-block; }
+  .asset-label { display: block; margin-top: 10px; font-size: 12px; color: var(--ink-3); }
+  .small-row { display: flex; gap: 14px; align-items: flex-end; margin-top: 8px; }
+  .small-row .s { text-align: center; }
+  .small-row .s span { display: block; font-size: 10px; color: var(--ink-3); margin-top: 5px; }
+
+  .launcher { background: #070d20; border-radius: 12px; padding: 30px 20px 22px;
+    display: flex; gap: 34px; justify-content: center; align-items: flex-start; overflow-x: auto; }
+  .tile { text-align: center; opacity: 0.75; }
+  .tile .art { width: 92px; height: 92px; border-radius: 14px; overflow: hidden; }
+  .tile .art svg { display: block; width: 100%; height: 100%; }
+  .tile .name { margin-top: 9px; font-size: 12px; color: var(--ink-2); }
+  .tile.focus { opacity: 1; }
+  .tile.focus .art { outline: 3px solid var(--accent); outline-offset: 3px; }
+  .tile.focus .name { color: var(--ink); font-weight: 600; }
+
+  .splash-mock { width: 100%; border-radius: 10px; display: block; border: 1px solid var(--hairline); }
+
+  .appinfo { display: flex; gap: 26px; align-items: center; flex-wrap: wrap; }
+  .swatch { width: 84px; height: 84px; border-radius: 10px; border: 1px solid var(--hairline); }
+  .appinfo .meta { flex: 1; min-width: 280px; }
+  .appinfo .meta b { font-size: 15px; font-weight: 600; }
+  .appinfo .meta p { color: var(--ink-2); font-size: 13px; line-height: 1.6; margin-top: 6px; max-width: 60ch; }
+
+  #switcher {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    background: #10131c; border: 1px solid rgba(255,255,255,0.22);
+    border-radius: 999px; box-shadow: 0 10px 30px rgba(0,0,0,0.55);
+    display: flex; align-items: center; gap: 6px; padding: 6px 10px; z-index: 10;
+  }
+  #switcher button {
+    background: rgba(255,255,255,0.08); color: #fff; border: none; border-radius: 999px;
+    width: 34px; height: 34px; font-size: 15px; cursor: pointer;
+  }
+  #switcher button:hover { background: rgba(255,255,255,0.18); }
+  #switcher #label { min-width: 190px; text-align: center; font-size: 13.5px; font-weight: 600;
+    color: #fff; letter-spacing: 0.01em; }
+  #switcher #label small { display: block; font-weight: 400; color: rgba(255,255,255,0.55);
+    font-size: 11px; margin-top: 1px; }
+
+  footer { margin-top: 8px; color: var(--ink-3); font-size: 12px; line-height: 1.7; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="kicker">Throwaway prototype · webos-bluepad#14</div>
+  <h1>BluePad — icon &amp; splash concepts</h1>
+  <p>Three structurally different readings of the locked direction: <em>flat, dark
+  background, blue accent, gamepad silhouette + Bluetooth rune, device-agnostic</em>
+  (a generic dual-grip pad — Xbox pads are in scope, so nothing DualSense-specific).
+  Brand palette from the UI prototype: ground <code>#0b1738</code>, accent
+  <code>#5b8dff</code>. Flip with the bar below or ←/→. Each concept is shown across
+  the full appinfo set: <code>icon.png</code> 130×130, <code>icon_large.png</code>
+  320×320, small-size legibility, launcher context, <code>splash.png</code>, and
+  <code>iconColor</code>.</p>
+</header>
+
+<!-- shared defs: pad silhouette + bluetooth rune -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <radialGradient id="gradA" cx="50%" cy="42%" r="78%">
+      <stop offset="0" stop-color="#13234e"/>
+      <stop offset="1" stop-color="#0b1738"/>
+    </radialGradient>
+    <g id="pad">
+      <rect x="30" y="25" width="180" height="75" rx="37.5"/>
+      <circle cx="62" cy="92" r="36"/>
+      <circle cx="178" cy="92" r="36"/>
+    </g>
+    <path id="rune" fill="none"
+      d="M12 2 V22 M12 2 L5 12 L12 22 M12 2 L19 12 L12 22"/>
+  </defs>
+</svg>
+
+<!-- ============ concept symbols ============ -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+
+  <!-- A: solid glyph — relief pad, accent rune overlaid -->
+  <symbol id="iconA" viewBox="0 0 320 320">
+    <rect width="320" height="320" fill="url(#gradA)"/>
+    <g transform="translate(40,88)">
+      <use href="#pad" fill="#263764"/>
+      <g fill="#0b1738">
+        <rect x="52" y="57" width="24" height="10" rx="2"/>
+        <rect x="59" y="50" width="10" height="24" rx="2"/>
+        <circle cx="176" cy="52" r="5"/><circle cx="186" cy="62" r="5"/>
+        <circle cx="176" cy="72" r="5"/><circle cx="166" cy="62" r="5"/>
+      </g>
+    </g>
+    <use href="#rune" transform="translate(94,94) scale(5.5)"
+      stroke="#5b8dff" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+
+  <!-- B: full-bleed mass — the pad IS the icon, rune knocked in -->
+  <symbol id="iconB" viewBox="0 0 320 320">
+    <rect width="320" height="320" fill="#05081c"/>
+    <g transform="translate(-56,60) scale(1.8)">
+      <use href="#pad" fill="#5b8dff"/>
+    </g>
+    <use href="#rune" transform="translate(82,94) scale(6.5)"
+      stroke="#0b1738" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+
+  <!-- C: line mark — hairline pad outline, rune contained -->
+  <symbol id="iconC" viewBox="0 0 320 320">
+    <rect width="320" height="320" fill="#0b1738"/>
+    <circle cx="80" cy="90" r="160" fill="#5b8dff" opacity="0.08"/>
+    <circle cx="250" cy="240" r="160" fill="#5b8dff" opacity="0.06"/>
+    <g transform="translate(40,88)">
+      <g stroke="rgba(255,255,255,0.55)" stroke-width="16" stroke-linejoin="round">
+        <use href="#pad" fill="rgba(255,255,255,0.55)"/>
+      </g>
+      <use href="#pad" fill="#0b1738"/>
+    </g>
+    <use href="#rune" transform="translate(124,117) scale(3)"
+      stroke="#5b8dff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+
+  <!-- splashes: same 16:9 composition, only the mark varies -->
+  <symbol id="splashBase" viewBox="0 0 960 540">
+    <rect width="960" height="540" fill="#0b1738"/>
+    <circle cx="230" cy="110" r="270" fill="#5b8dff" opacity="0.07"/>
+    <circle cx="770" cy="470" r="310" fill="#5b8dff" opacity="0.05"/>
+  </symbol>
+  <symbol id="splashA" viewBox="0 0 960 540">
+    <use href="#splashBase"/>
+    <use href="#iconA" x="390" y="92" width="180" height="180"/>
+    <text x="480" y="330" text-anchor="middle" fill="#ffffff" font-size="46"
+      font-weight="700" letter-spacing="1"
+      font-family="Geist, Inter, system-ui, sans-serif">BluePad</text>
+    <text x="480" y="368" text-anchor="middle" fill="rgba(255,255,255,0.62)"
+      font-size="17" font-family="Geist, Inter, system-ui, sans-serif">Bluetooth gamepads for webOS</text>
+  </symbol>
+  <symbol id="splashB" viewBox="0 0 960 540">
+    <use href="#splashBase"/>
+    <use href="#iconB" x="390" y="92" width="180" height="180"/>
+    <text x="480" y="330" text-anchor="middle" fill="#ffffff" font-size="46"
+      font-weight="700" letter-spacing="1"
+      font-family="Geist, Inter, system-ui, sans-serif">BluePad</text>
+    <text x="480" y="368" text-anchor="middle" fill="rgba(255,255,255,0.62)"
+      font-size="17" font-family="Geist, Inter, system-ui, sans-serif">Bluetooth gamepads for webOS</text>
+  </symbol>
+  <symbol id="splashC" viewBox="0 0 960 540">
+    <use href="#splashBase"/>
+    <use href="#iconC" x="390" y="92" width="180" height="180"/>
+    <text x="480" y="330" text-anchor="middle" fill="#ffffff" font-size="46"
+      font-weight="700" letter-spacing="1"
+      font-family="Geist, Inter, system-ui, sans-serif">BluePad</text>
+    <text x="480" y="368" text-anchor="middle" fill="rgba(255,255,255,0.62)"
+      font-size="17" font-family="Geist, Inter, system-ui, sans-serif">Bluetooth gamepads for webOS</text>
+  </symbol>
+
+  <!-- muted dummy launcher tiles -->
+  <symbol id="dummyStream" viewBox="0 0 320 320">
+    <rect width="320" height="320" rx="34" fill="#1a2030"/>
+    <path d="M120 90 L230 160 L120 230 Z" fill="rgba(255,255,255,0.55)"/>
+  </symbol>
+  <symbol id="dummyMusic" viewBox="0 0 320 320">
+    <rect width="320" height="320" rx="34" fill="#1a2030"/>
+    <path d="M210 80 v110 a34 34 0 1 1 -22 -32 v-52 l-66 14 v96 a34 34 0 1 1 -22 -32 v-104 z"
+      fill="rgba(255,255,255,0.55)"/>
+  </symbol>
+  <symbol id="dummyPhotos" viewBox="0 0 320 320">
+    <rect width="320" height="320" rx="34" fill="#1a2030"/>
+    <circle cx="115" cy="115" r="26" fill="rgba(255,255,255,0.55)"/>
+    <path d="M70 240 L150 155 L205 215 L245 175 L265 240 Z" fill="rgba(255,255,255,0.55)"/>
+  </symbol>
+  <symbol id="dummySettings" viewBox="0 0 320 320">
+    <rect width="320" height="320" rx="34" fill="#1a2030"/>
+    <path d="M160 105 a55 55 0 1 0 0.01 0 z M160 60 l10 26 a76 76 0 0 1 22 9 l25 -11 19 19 -11 25 a76 76 0 0 1 9 22 l26 10 v27 l-26 10 a76 76 0 0 1 -9 22 l11 25 -19 19 -25 -11 a76 76 0 0 1 -22 9 l-10 26 h-27 l-10 -26 a76 76 0 0 1 -22 -9 l-25 11 -19 -19 11 -25 a76 76 0 0 1 -9 -22 l-26 -10 v-27 l26 -10 a76 76 0 0 1 9 -22 l-11 -25 19 -19 25 11 a76 76 0 0 1 22 -9 l10 -26 z"
+      fill="rgba(255,255,255,0.55)"/>
+  </symbol>
+  </defs>
+</svg>
+
+<!-- ============ variant A ============ -->
+<section class="variant" id="vA">
+  <h2>A · Solid glyph</h2>
+  <p class="gist">The literal reading of the direction: a solid gamepad silhouette in relief
+  navy on the brand ground, the Bluetooth rune overlaid down the middle in full accent.
+  D-pad and face buttons are knocked out to sell "gamepad" without naming any device.
+  Safest at launcher size — the silhouette carries at 48 px, the rune still resolves.</p>
+
+  <div class="panel">
+    <h3>icon_large.png · 320×320 &nbsp;+&nbsp; icon.png · 130×130 &nbsp;+&nbsp; legibility</h3>
+    <div class="hero-row">
+      <div class="icon-slot"><div class="frame"><svg width="220" height="220"><use href="#iconA"/></svg></div>
+        <span class="asset-label">320×320 · icon_large</span></div>
+      <div class="icon-slot"><div class="frame"><svg width="130" height="130"><use href="#iconA"/></svg></div>
+        <span class="asset-label">130×130 · icon</span>
+        <div class="small-row">
+          <div class="s"><svg width="96" height="96"><use href="#iconA"/></svg><span>96</span></div>
+          <div class="s"><svg width="64" height="64"><use href="#iconA"/></svg><span>64</span></div>
+          <div class="s"><svg width="48" height="48"><use href="#iconA"/></svg><span>48</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Launcher context — webOS 4 ribbon</h3>
+    <div class="launcher">
+      <div class="tile"><div class="art"><svg><use href="#dummyStream"/></svg></div><div class="name">Stream</div></div>
+      <div class="tile"><div class="art"><svg><use href="#dummyMusic"/></svg></div><div class="name">Music</div></div>
+      <div class="tile focus"><div class="art"><svg><use href="#iconA"/></svg></div><div class="name">BluePad</div></div>
+      <div class="tile"><div class="art"><svg><use href="#dummyPhotos"/></svg></div><div class="name">Photos</div></div>
+      <div class="tile"><div class="art"><svg><use href="#dummySettings"/></svg></div><div class="name">Settings</div></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>splash.png · cold start</h3>
+    <svg class="splash-mock"><use href="#splashA"/></svg>
+  </div>
+
+  <div class="panel">
+    <h3>iconColor</h3>
+    <div class="appinfo">
+      <div class="swatch" style="background:#0b1738"></div>
+      <div class="meta"><b>#0b1738 — the brand ground</b>
+        <p>Loading and ambient UI blend into the icon's own base, so the tile never
+        flashes a foreign color on launch. Same field the whole app ships on.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ variant B ============ -->
+<section class="variant" id="vB">
+  <h2>B · Full-bleed mass</h2>
+  <p class="gist">The poster: the pad IS the icon. An oversized accent-blue gamepad mass
+  cropped edge-to-edge on the deep field, the rune knocked into its face in brand navy.
+  Boldest in a launcher row of dark tiles — the blue block is visible across the room;
+  the rune fully resolves only at 320, which is fine because the silhouette does the
+  small-size work.</p>
+
+  <div class="panel">
+    <h3>icon_large.png · 320×320 &nbsp;+&nbsp; icon.png · 130×130 &nbsp;+&nbsp; legibility</h3>
+    <div class="hero-row">
+      <div class="icon-slot"><div class="frame"><svg width="220" height="220"><use href="#iconB"/></svg></div>
+        <span class="asset-label">320×320 · icon_large</span></div>
+      <div class="icon-slot"><div class="frame"><svg width="130" height="130"><use href="#iconB"/></svg></div>
+        <span class="asset-label">130×130 · icon</span>
+        <div class="small-row">
+          <div class="s"><svg width="96" height="96"><use href="#iconB"/></svg><span>96</span></div>
+          <div class="s"><svg width="64" height="64"><use href="#iconB"/></svg><span>64</span></div>
+          <div class="s"><svg width="48" height="48"><use href="#iconB"/></svg><span>48</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Launcher context — webOS 4 ribbon</h3>
+    <div class="launcher">
+      <div class="tile"><div class="art"><svg><use href="#dummyStream"/></svg></div><div class="name">Stream</div></div>
+      <div class="tile"><div class="art"><svg><use href="#dummyMusic"/></svg></div><div class="name">Music</div></div>
+      <div class="tile focus"><div class="art"><svg><use href="#iconB"/></svg></div><div class="name">BluePad</div></div>
+      <div class="tile"><div class="art"><svg><use href="#dummyPhotos"/></svg></div><div class="name">Photos</div></div>
+      <div class="tile"><div class="art"><svg><use href="#dummySettings"/></svg></div><div class="name">Settings</div></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>splash.png · cold start</h3>
+    <svg class="splash-mock"><use href="#splashB"/></svg>
+  </div>
+
+  <div class="panel">
+    <h3>iconColor</h3>
+    <div class="appinfo">
+      <div class="swatch" style="background:#05081c"></div>
+      <div class="meta"><b>#05081c — the deep field</b>
+        <p>Keeps the tile edge dark so the blue mass carries the identity; ambient UI
+        stays out of the accent's way. The blue is the mark, not the backdrop.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ variant C ============ -->
+<section class="variant" id="vC">
+  <h2>C · Line mark</h2>
+  <p class="gist">The quiet one: the pad drawn as a hairline outline, the rune contained
+  inside it in accent — rune-forward, pad-quiet. The most "designed" of the three and
+  the least shouty. Risk: the outline can wash out at 48 px on a TV panel; check the
+  legibility row honestly.</p>
+
+  <div class="panel">
+    <h3>icon_large.png · 320×320 &nbsp;+&nbsp; icon.png · 130×130 &nbsp;+&nbsp; legibility</h3>
+    <div class="hero-row">
+      <div class="icon-slot"><div class="frame"><svg width="220" height="220"><use href="#iconC"/></svg></div>
+        <span class="asset-label">320×320 · icon_large</span></div>
+      <div class="icon-slot"><div class="frame"><svg width="130" height="130"><use href="#iconC"/></svg></div>
+        <span class="asset-label">130×130 · icon</span>
+        <div class="small-row">
+          <div class="s"><svg width="96" height="96"><use href="#iconC"/></svg><span>96</span></div>
+          <div class="s"><svg width="64" height="64"><use href="#iconC"/></svg><span>64</span></div>
+          <div class="s"><svg width="48" height="48"><use href="#iconC"/></svg><span>48</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Launcher context — webOS 4 ribbon</h3>
+    <div class="launcher">
+      <div class="tile"><div class="art"><svg><use href="#dummyStream"/></svg></div><div class="name">Stream</div></div>
+      <div class="tile"><div class="art"><svg><use href="#dummyMusic"/></svg></div><div class="name">Music</div></div>
+      <div class="tile focus"><div class="art"><svg><use href="#iconC"/></svg></div><div class="name">BluePad</div></div>
+      <div class="tile"><div class="art"><svg><use href="#dummyPhotos"/></svg></div><div class="name">Photos</div></div>
+      <div class="tile"><div class="art"><svg><use href="#dummySettings"/></svg></div><div class="name">Settings</div></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>splash.png · cold start</h3>
+    <svg class="splash-mock"><use href="#splashC"/></svg>
+  </div>
+
+  <div class="panel">
+    <h3>iconColor</h3>
+    <div class="appinfo">
+      <div class="swatch" style="background:#0b1738"></div>
+      <div class="meta"><b>#0b1738 — the brand ground</b>
+        <p>The line mark needs the brand base behind it to read at all; ambient UI must
+        match it or the hairline pad dissolves during launch.</p></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  THROWAWAY — lives on branch <em>prototype/bluepad-icon</em>, never merged. The winning
+  concept gets redrawn as real PNG assets for the appinfo set; the verdict and the branch
+  are recorded on
+  <a href="https://github.com/acheronian/webos-bluepad/issues/14" style="color:var(--accent)">the ticket</a>.
+</footer>
+
+</div>
+
+<div id="switcher">
+  <button id="prev" title="previous concept">←</button>
+  <span id="label"></span>
+  <button id="next" title="next concept">→</button>
+</div>
+
+<script>
+  const VARIANTS = [
+    { k: 'A', n: 'Solid glyph' },
+    { k: 'B', n: 'Full-bleed mass' },
+    { k: 'C', n: 'Line mark' },
+  ];
+  const label = document.getElementById('label');
+
+  function currentKey() {
+    const h = decodeURIComponent(location.hash.replace('#', '')).toUpperCase();
+    return VARIANTS.some(v => v.k === h) ? h : 'A';
+  }
+  function show(k) {
+    VARIANTS.forEach(v => {
+      document.getElementById('v' + v.k).classList.toggle('active', v.k === k);
+    });
+    const v = VARIANTS.find(v => v.k === k);
+    label.innerHTML = v.k + ' · ' + v.n +
+      '<small>' + (VARIANTS.indexOf(v) + 1) + ' / ' + VARIANTS.length + '</small>';
+    if (location.hash !== '#' + k) history.replaceState(null, '', '#' + k);
+  }
+  function step(d) {
+    const i = VARIANTS.findIndex(v => v.k === currentKey());
+    show(VARIANTS[(i + d + VARIANTS.length) % VARIANTS.length].k);
+  }
+  document.getElementById('prev').onclick = () => step(-1);
+  document.getElementById('next').onclick = () => step(1);
+  window.addEventListener('keydown', e => {
+    if (e.target.closest && e.target.closest('input, textarea, [contenteditable]')) return;
+    if (e.key === 'ArrowLeft') step(-1);
+    if (e.key === 'ArrowRight') step(1);
+  });
+  window.addEventListener('hashchange', () => show(currentKey()));
+  show(currentKey());
+</script>
+</body>
+</html>
