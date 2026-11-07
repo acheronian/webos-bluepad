@@ -10,16 +10,20 @@
   flow, connection status, adapter-selection settings, about — in punktfunk's
   console-kit design language?
 
-  Plan: three structurally different variants of the whole app on one stage,
-  switchable via the floating bar (click, or press [ and ]): hash #variant=A|B|C.
-    A "Shell tabs"  — punktfunk-faithful: pinned title band, tabs, rows, hint bar.
-    B "Rail + cards" — left rail navigation, hero status card, pad card grid.
-    C "Ring-first"  — one giant pair-ring, pads as ambient chips, chrome hidden.
+  Round 1 verdict: variant B "Rail + cards" won the shell; the violet field is
+  rebranded to BluePad's deep-blue base (same mesh structure, blue flow).
+
+  Round 2: sub-variants for the screens that still need a decision — switchable
+  from the floating bar's second row (hash: &set= &about= &search=):
+    Settings 1 section rows · 2 master-detail panes · 3 category cards (accordion)
+    About    1 hero + lines · 2 centered mark · 3 document sections
+    Search   1 step sheet · 2 center ring · 3 split search-results view
+  Variant A/C remain switchable via #variant=A|C for reference (B is default).
 
   Drive it like the TV: arrows = D-pad, Enter = A/OK, Backspace/Esc = Back.
-  Design tokens lifted from pf-console-ui sources (theme.rs / palette.rs / shell.rs):
-  violet mesh field, glass panels, rim-light hairlines, Geist, 1.5dp glyphs,
-  88dp top band, 86dp hint bar, sprung push/pop.
+  Design language from pf-console-ui sources (theme.rs / palette.rs / shell.rs):
+  mesh field, glass panels, rim-light hairlines, Geist, 1.5dp glyphs,
+  88dp top band, 86dp hint bar, sprung push/pop — over BluePad blues.
 -->
 <html>
 <head>
@@ -27,8 +31,9 @@
 <title>BluePad UI prototype (THROWAWAY) — webos-bluepad#8</title>
 <style>
   :root {
-    --ground: #21186e;          /* palette.rs "violet" ground (0.129, 0.094, 0.431) */
-    --accent: #8678f5;          /* palette.rs accent (0.525, 0.471, 0.961) */
+    --ground: #0b1738;          /* BluePad brand base: deep navy (punktfunk violet rebranded) */
+    --accent: #5b8dff;          /* brand blue */
+    --accent-rgb: 91, 141, 255;
     --ink: #ffffff;
     --ink-2: rgba(255, 255, 255, 0.62);
     --ink-3: rgba(255, 255, 255, 0.38);
@@ -40,7 +45,7 @@
     --radius: 18px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { height: 100%; background: #0b0820; overflow: hidden;
+  html, body { height: 100%; background: #05081c; overflow: hidden;
     font-family: 'Geist', 'Geist UI', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
   svg { display: inline-block; vertical-align: -3px; }
 
@@ -75,7 +80,7 @@
   /* ---- focus ---- */
   .focusable { outline: none; cursor: pointer; transition: transform .18s cubic-bezier(.2,.9,.25,1.2), background .18s, box-shadow .18s; }
   .focused { background: var(--glass-2);
-    box-shadow: 0 0 0 2px var(--accent), 0 8px 32px rgba(0,0,0,.35), 0 0 48px rgba(134,120,245,.35);
+    box-shadow: 0 0 0 2px var(--accent), 0 8px 32px rgba(0,0,0,.35), 0 0 48px rgba(var(--accent-rgb),.35);
     transform: scale(1.015); }
 
   /* ---- screens + push/pop (shell.rs: slide 36dp, scale .985/.96, spring) ---- */
@@ -90,7 +95,7 @@
   .chip .dot { width: 10px; height: 10px; border-radius: 50%; }
   .chip.ok { color: var(--ok); background: rgba(51,214,74,.10); } .chip.ok .dot { background: var(--ok); }
   .chip.off { color: var(--ink-3); background: rgba(255,255,255,.05); } .chip.off .dot { background: var(--ink-3); }
-  .chip.busy { color: var(--accent); background: rgba(134,120,245,.12); } .chip.busy .dot { background: var(--accent); animation: pulse 1.2s infinite; }
+  .chip.busy { color: var(--accent); background: rgba(var(--accent-rgb),.12); } .chip.busy .dot { background: var(--accent); animation: pulse 1.2s infinite; }
   .chip.err { color: var(--err); background: rgba(255,147,138,.10); } .chip.err .dot { background: var(--err); }
   .route-badge { font-size: 18px; color: var(--ink-3); border: 1px solid var(--hairline);
     padding: 2px 10px; border-radius: 8px; letter-spacing: .03em; }
@@ -135,11 +140,11 @@
   .ring { width: 340px; height: 340px; border-radius: 50%; position: relative;
     display: flex; align-items: center; justify-content: center; color: var(--accent); }
   .ring::before { content: ''; position: absolute; inset: 0; border-radius: 50%;
-    border: 3px solid rgba(134,120,245,.35); }
+    border: 3px solid rgba(var(--accent-rgb),.35); }
   .ring::after { content: ''; position: absolute; inset: -26px; border-radius: 50%;
     border: 2px solid rgba(255,255,255,.10); } /* glow_ring bleed */
   .ring .ring-fill { position: absolute; inset: 0; border-radius: 50%;
-    background: radial-gradient(circle, rgba(134,120,245,.22), rgba(134,120,245,.04) 62%, transparent 70%); }
+    background: radial-gradient(circle, rgba(var(--accent-rgb),.22), rgba(var(--accent-rgb),.04) 62%, transparent 70%); }
   .ring svg { position: relative; }
   .ring.scanning::before { border-top-color: var(--accent); animation: spin 1.1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -215,8 +220,40 @@
     justify-content: center; background: rgba(255,255,255,.10); font-weight: 700; color: var(--ink-2); }
   #vB .step.done .n { background: var(--ok); color: #06250b; }
   #vB .step.now .n { background: var(--accent); color: #fff; animation: pulse 1.2s infinite; }
-  #vB .step.now { background: rgba(134,120,245,.10); }
+  #vB .step.now { background: rgba(var(--accent-rgb),.10); }
   #vB .step.todo { opacity: .45; }
+
+  /* ================= VARIANT B sub-variants (round 2) ================= */
+  /* settings 2: master-detail panes */
+  #vB .md { display: flex; gap: 26px; height: 100%; }
+  #vB .md-cats { width: 400px; display: flex; flex-direction: column; gap: 14px; }
+  #vB .md-cats .set-row.cat-on { background: rgba(var(--accent-rgb),.14); }
+  #vB .md-pane { flex: 1; }
+  #vB .md-pane .rows { display: flex; flex-direction: column; gap: 14px; }
+  /* settings 3: category cards, accordion */
+  #vB .cat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-content: start; }
+  #vB .cat-card { padding: 32px 36px; }
+  #vB .cat-card .head { display: flex; align-items: center; gap: 18px; font-size: 25px; font-weight: 600; }
+  #vB .cat-card .head .glyph { color: var(--accent); }
+  #vB .cat-card .hintline { margin-top: 18px; color: var(--ink-3); font-size: 18px; }
+  #vB .cat-card .rows-in { margin-top: 24px; display: flex; flex-direction: column; gap: 12px; }
+  /* about 2: centered mark */
+  #vB .about-center { position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 30px; }
+  #vB .about-center .mark { width: 110px; height: 110px; border-radius: 28px; background: var(--accent);
+    display: flex; align-items: center; justify-content: center; color: #fff; }
+  #vB .about-center h2 { font-size: 40px; text-align: center; }
+  #vB .about-center .ver { color: var(--ink-3); font-size: 22px; text-align: center; margin-top: 6px; }
+  #vB .about-center .rows { width: 680px; display: flex; flex-direction: column; gap: 12px; }
+  /* about 3: document sections */
+  #vB .about-doc { max-width: 940px; display: flex; flex-direction: column; gap: 16px; }
+  /* search 3: split search-results view */
+  #vB .split { display: flex; gap: 60px; height: 100%; }
+  #vB .split-left { width: 600px; display: flex; flex-direction: column; justify-content: center; gap: 22px; }
+  #vB .split-left > svg { color: var(--accent); }
+  #vB .split-left .pair-sub { text-align: left; max-width: none; }
+  #vB .split-right { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 14px; }
+  #vB .skel { height: 78px; border-radius: var(--radius); background: rgba(255,255,255,.05); animation: pulse 1.6s infinite; }
 
   /* ================= VARIANT C — ring-first ================= */
   #vC .ring-stage { position: absolute; inset: 0; display: flex; flex-direction: column;
@@ -250,12 +287,15 @@
 
   /* ---- floating prototype switcher (not part of the design) ---- */
   #switcher { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%);
-    display: flex; align-items: center; gap: 14px; padding: 10px 18px; border-radius: 999px;
+    display: flex; flex-direction: column; gap: 8px; padding: 10px 18px; border-radius: 999px;
     background: #101014; color: #eee; font: 600 13px/1 system-ui, sans-serif;
     box-shadow: 0 6px 30px rgba(0,0,0,.6); border: 1px solid #333; z-index: 100; user-select: none; }
+  #switcher .sw-row { display: flex; align-items: center; gap: 14px; justify-content: center; }
   #switcher button { all: unset; cursor: pointer; padding: 6px 12px; border-radius: 8px; color: #aaa; }
   #switcher button:hover { background: #222; color: #fff; }
   #switcher .cur { background: #2d2d36; color: #fff; border-radius: 8px; padding: 6px 14px; min-width: 150px; text-align: center; }
+  #switcher .sgroup { color: #777; font-weight: 500; display: flex; align-items: center; gap: 4px; }
+  #switcher .sdiv { width: 1px; height: 16px; background: #333; }
   #switcher .pills { display: flex; gap: 6px; }
   #switcher .pill { padding: 6px 12px; border-radius: 8px; cursor: pointer; color: #888; }
   #switcher .pill.on { background: #444; color: #fff; }
@@ -319,30 +359,9 @@
         <div class="hero panel" id="vB-hero"></div>
         <div class="card-grid" id="vB-cards"></div>
       </div>
-      <div class="screen hidden-" data-vB-screen="settings"><div class="content" style="top:0">
-        <div class="section-label">Bluetooth adapter</div>
-        <div class="rows" id="vB-adapterrows"></div>
-        <div class="section-label">Behavior</div>
-        <div class="rows" id="vB-behaviorrows"></div>
-      </div></div>
-      <div class="screen hidden-" data-vB-screen="about"><div class="about-block">
-        <div class="about-hero panel">
-          <div class="mark"><svg data-icon="gamepad" width="56" height="56"></svg></div>
-          <div><h2>BluePad</h2><div class="ver">0.1.0 · com.acheronian.bluepad</div></div>
-        </div>
-        <div class="panel about-lines">
-          Bluetooth gamepad manager for webOS&nbsp;4.x — app-owned HID sessions with the
-          stock path as fallback; input delivered to streaming apps.<br>
-          Homebrew Channel · MIT / Apache-2.0 · punktfunk-style native Rust + Skia.
-        </div>
-      </div></div></div>
-      <div class="screen hidden-" data-vB-screen="pair">
-        <div class="sheet panel">
-          <h2>Add a pad</h2>
-          <div class="steps" id="vB-steps"></div>
-          <div class="pair-sub" id="vB-pair-sub" style="text-align:left"></div>
-        </div>
-      </div>
+      <div class="screen hidden-" data-vB-screen="settings"><div class="content" style="top:0" id="vB-settings-root"></div></div>
+      <div class="screen hidden-" data-vB-screen="about"><div class="about-block" id="vB-about-root"></div></div></div>
+      <div class="screen hidden-" data-vB-screen="pair"><div id="vB-pair-root" style="height:100%"></div></div>
       <div class="screen hidden-" data-vB-screen="detail"><div class="center-col" id="vB-detail"></div></div>
     </div>
     <div class="hintbar" id="vB-hints"></div>
@@ -381,22 +400,25 @@
 </div></div>
 
 <div id="switcher">
-  <button id="sw-prev" title="previous variant">←</button>
-  <div class="pills" id="sw-pills"></div>
-  <div class="cur" id="sw-cur"></div>
-  <button id="sw-next" title="next variant">→</button>
-  <span class="state" id="sw-state"></span>
-  <span class="kbd">[ ] switch · ⭠⭢ D-pad · ⏎ A · ⌫ Back</span>
+  <div class="sw-row">
+    <button id="sw-prev" title="previous variant">←</button>
+    <div class="pills" id="sw-pills"></div>
+    <div class="cur" id="sw-cur"></div>
+    <button id="sw-next" title="next variant">→</button>
+    <span class="state" id="sw-state"></span>
+    <span class="kbd">[ ] shell · ⭠⭢ D-pad · ⏎ A · ⌫ Back</span>
+  </div>
+  <div class="sw-row" id="sw-sub"></div>
 </div>
 
 <script>
 'use strict';
 /* ================= design tokens from pf-console-ui ================= */
-const MESH_COLORS = [ /* palette.rs MESH_COLORS, verbatim */
-  [.075,.060,.160],[.34,.27,.72],[.30,.26,.74],[.075,.060,.160],
-  [.42,.20,.54],[.49,.39,.95],[.28,.31,.84],[.16,.26,.64],
-  [.45,.23,.60],[.53,.31,.75],[.35,.35,.91],[.19,.28,.70],
-  [.075,.060,.160],[.22,.18,.54],[.24,.20,.58],[.075,.060,.160]];
+const MESH_COLORS = [ /* BluePad blue rebrand of palette.rs MESH_COLORS — same corner-dark/center-lit flow */
+  [.030,.055,.150],[.15,.28,.70],[.12,.26,.75],[.030,.055,.150],
+  [.19,.27,.66],[.26,.42,.95],[.17,.33,.88],[.09,.21,.60],
+  [.15,.23,.55],[.21,.35,.80],[.19,.39,.92],[.11,.23,.64],
+  [.030,.055,.150],[.11,.17,.48],[.10,.19,.52],[.030,.055,.150]];
 
 /* Mesh drawn small and CSS-upscaled — the same "reduce interface resolution"
    trick punktfunk uses for weak GPUs (issue #271). */
@@ -443,6 +465,8 @@ document.querySelectorAll('svg[data-icon]').forEach(el => {
 
 /* ================= shared in-memory state ================= */
 const state = {
+  settingsCat: 'adapter',      // settings sub-variant 2: selected master pane
+  expandedCat: null,           // settings sub-variant 3: expanded accordion card
   pads: [
     { id: 1, name: 'DualSense (BluePad)', sub: 'Wireless Controller · rev B', route: 'app-owned', status: 'connected', battery: 60 },
     { id: 2, name: 'DualSense (BluePad)', sub: 'Wireless Controller · rev A', route: 'stock', status: 'connected', battery: 90 },
@@ -467,14 +491,31 @@ const VARIANTS = [
   { key: 'B', name: 'Rail + cards' },
   { key: 'C', name: 'Ring-first' },
 ];
-let curVariant = (location.hash.match(/variant=([ABC])/) || [])[1]
-  || (new URLSearchParams(location.search).get('variant')) || 'A';
+let curVariant;
+const sub = { set: 1, about: 1, search: 1 };   // round-2 sub-variants
+const SUBS = [
+  { key: 'set', label: 'Settings' },
+  { key: 'about', label: 'About' },
+  { key: 'search', label: 'Device search' },
+];
+(function parseLoc() {
+  const h = new URLSearchParams((location.hash || '').replace(/^#/, '') || location.search);
+  curVariant = ['A', 'B', 'C'].includes(h.get('variant')) ? h.get('variant') : 'B'; // B won the shell
+  for (const k of ['set', 'about', 'search']) {
+    const n = parseInt(h.get(k), 10);
+    if (n >= 1 && n <= 3) sub[k] = n;
+  }
+})();
+function writeHash() {
+  history.replaceState(null, '',
+    `#variant=${curVariant}&set=${sub.set}&about=${sub.about}&search=${sub.search}`);
+}
 const stacks = { A: ['pads'], B: ['home'], C: ['ring'] };  // screen stacks per variant
 const focusMem = {};   // remembered focus per (variant, screen)
 
 function setVariant(key, push) {
   curVariant = key;
-  if (push !== false) history.replaceState(null, '', '#variant=' + key);
+  writeHash();
   document.querySelectorAll('.variant').forEach(v => v.classList.remove('active'));
   document.getElementById('v' + key).classList.add('active');
   renderSwitcher();
@@ -489,6 +530,14 @@ function renderSwitcher() {
     `<span class="pill ${v.key === curVariant ? 'on' : ''}" data-v="${v.key}">${v.key}</span>`).join('');
   pills.querySelectorAll('.pill').forEach(p =>
     p.onclick = () => setVariant(p.dataset.v));
+  // round-2 sub-variant pills
+  const subEl = document.getElementById('sw-sub');
+  subEl.innerHTML = SUBS.map(g =>
+    `<span class="sgroup">${g.label} ${Array.from({ length: 3 }, (_, i) =>
+      `<span class="pill ${sub[g.key] === i + 1 ? 'on' : ''}" data-sub="${g.key}" data-n="${i + 1}">${i + 1}</span>`).join('')}</span>`
+  ).join('<span class="sdiv"></span>');
+  subEl.querySelectorAll('.pill').forEach(p =>
+    p.onclick = () => { sub[p.dataset.sub] = +p.dataset.n; writeHash(); renderAll(); restoreFocus(); });
 }
 document.getElementById('sw-prev').onclick = () => cycle(-1);
 document.getElementById('sw-next').onclick = () => cycle(1);
@@ -553,6 +602,7 @@ function setFocus(el) {
   focusedEl = el;
   if (el) {
     el.classList.add('focused');
+    if (el.dataset.select) ACTIONS[el.dataset.select](el); // focus = selection (master-detail)
     const scr = el.closest('.screen');
     if (scr) {
       const v = curVariant;
@@ -658,6 +708,12 @@ const ACTIONS = {
     state.pads = state.pads.filter(p => p.id !== id);
     popScreen(curVariant); renderAll();
   },
+  setcat: el => { if (state.settingsCat !== el.dataset.cat) { state.settingsCat = el.dataset.cat; renderAll(); } },
+  expandcat: el => {
+    state.expandedCat = state.expandedCat === el.dataset.cat ? null : el.dataset.cat;
+    renderAll();
+  },
+  noop: () => {},
   'vC-chip': el => openDetail('C', +el.dataset.padId),
 };
 
@@ -785,6 +841,24 @@ function openDetail(v, padId) {
 
 /* ================= variant B render ================= */
 const B_RAIL = [['home', 'Pads', 'gamepad'], ['settings', 'Adapter & settings', 'settings'], ['about', 'About', 'info']];
+const SET_CATS = [['adapter', 'Bluetooth adapter', 'radio'], ['behavior', 'Behavior', 'refresh'], ['diagnostics', 'Diagnostics', 'info']];
+function settingsCatRows(cat, v) {
+  if (cat === 'adapter') return adapterRowsHTML(v);
+  if (cat === 'behavior') return behaviorRowsHTML(v);
+  return `
+    <div class="set-row panel focusable" data-focus-id="vB-log" data-act="noop">
+      <span class="glyph">${icon('info', 30)}</span>
+      <div><div class="name">Session log</div>
+        <div class="desc">Ring buffer of pair/connect events, exportable for bug reports</div></div>
+      <div class="right"><span class="route-badge">VIEW</span></div>
+    </div>
+    <div class="set-row panel focusable" data-focus-id="vB-probe" data-act="noop">
+      <span class="glyph">${icon('radio', 30)}</span>
+      <div><div class="name">Probe bluetooth2</div>
+        <div class="desc">Run the on-device LS2 / adapter checklist</div></div>
+      <div class="right"><span class="route-badge">RUN</span></div>
+    </div>`;
+}
 function renderB() {
   document.getElementById('vB-rail').innerHTML =
     `<div class="logo">${icon('gamepad', 30)} BluePad</div>`
@@ -802,25 +876,124 @@ function renderB() {
       <div class="chiprow">${chipHTML(p.status)}<span class="route-badge">${ROUTE_LABEL[p.route]}</span></div>
     </div>`).join('')
     + `<div class="pad-card add focusable" data-focus-id="add" data-act="vB-add">${icon('plus', 34)} Add a pad</div>`;
-  document.getElementById('vB-adapterrows').innerHTML = adapterRowsHTML('vB');
-  document.getElementById('vB-behaviorrows').innerHTML = behaviorRowsHTML('vB');
+  // ---- settings screen: sub.set picks the structure ----
+  const S = document.getElementById('vB-settings-root');
+  if (sub.set === 2) {
+    S.innerHTML = `<div class="md">
+      <div class="md-cats">${SET_CATS.map(([id, label, ic]) => `
+        <div class="set-row panel focusable ${state.settingsCat === id ? 'cat-on' : ''}" data-focus-id="cat-${id}" data-select="setcat" data-cat="${id}">
+          <span class="glyph">${icon(ic, 28)}</span>
+          <div class="name">${label}</div>
+          <div class="right"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></div>
+        </div>`).join('')}</div>
+      <div class="md-pane"><div class="rows">${settingsCatRows(state.settingsCat, 'vB')}</div></div>
+    </div>`;
+  } else if (sub.set === 3) {
+    S.innerHTML = `<div class="cat-grid">${SET_CATS.map(([id, label, ic]) => `
+      <div class="cat-card panel focusable" data-focus-id="cat-${id}" data-act="expandcat" data-cat="${id}">
+        <div class="head"><span class="glyph">${icon(ic, 30)}</span>${label}</div>
+        ${state.expandedCat === id
+          ? `<div class="rows-in">${settingsCatRows(id, 'vB')}</div>`
+          : `<div class="hintline">Press A to open</div>`}
+      </div>`).join('')}</div>`;
+  } else {
+    S.innerHTML = `<div class="section-label">Bluetooth adapter</div><div class="rows">${adapterRowsHTML('vB')}</div>
+      <div class="section-label">Behavior</div><div class="rows">${behaviorRowsHTML('vB')}</div>`;
+  }
 
-  // detail
-  const padEl = document.getElementById('vB-detail');
-  const pad = state.pads.find(p => p.id === +(document.getElementById('vB').dataset.detailPad || 0));
-  if (pad) padEl.innerHTML = detailHTML(pad);
+  // ---- about screen: sub.about picks the structure ----
+  const AB = document.getElementById('vB-about-root');
+  if (sub.about === 2) {
+    AB.innerHTML = `<div class="about-center">
+      <div class="mark">${icon('gamepad', 64)}</div>
+      <div><h2>BluePad</h2><div class="ver">0.1.0 · com.acheronian.bluepad</div></div>
+      <div class="rows">
+        <div class="set-row panel"><span class="glyph">${icon('usb', 26)}</span>
+          <div><div class="name">Homebrew Channel</div><div class="desc">Central feed · category game · webOS ≥ 4</div></div></div>
+        <div class="set-row panel"><span class="glyph">${icon('info', 26)}</span>
+          <div><div class="name">License</div><div class="desc">MIT / Apache-2.0</div></div></div>
+        <div class="set-row panel"><span class="glyph">${icon('settings', 26)}</span>
+          <div><div class="name">Architecture</div><div class="desc">Native Rust + Skia over SDL3 · punktfunk-style</div></div></div>
+        <div class="set-row panel"><span class="glyph">${icon('gamepad', 26)}</span>
+          <div><div class="name">Source</div><div class="desc">github.com/acheronian/webos-bluepad</div></div></div>
+      </div>
+    </div>`;
+  } else if (sub.about === 3) {
+    AB.innerHTML = `<div class="about-doc">
+      <div class="section-label">About</div>
+      <div class="panel about-lines">BluePad pairs and connects Bluetooth gamepads on webOS&nbsp;4.x —
+        an app-owned HID session (raw L2CAP + uhid) first, the stock path second — and delivers
+        input to streaming apps such as punktfunk and Moonlight.</div>
+      <div class="section-label">Diagnostics</div>
+      <div class="panel about-lines">Version 0.1.0 · com.acheronian.bluepad · Homebrew Channel.
+        The session log and the bluetooth2 probe live under Settings → Diagnostics.</div>
+      <div class="section-label">Credits &amp; licenses</div>
+      <div class="panel about-lines">MIT / Apache-2.0. Architecture and toolchain patterns from
+        punktfunk/client-webos (MIT / Apache-2.0) · SDL3 webosbrew fork (Zlib) ·
+        Skia (BSD) · Lucide glyphs (ISC).</div>
+    </div>`;
+  } else {
+    AB.innerHTML = `
+      <div class="about-hero panel">
+        <div class="mark">${icon('gamepad', 56)}</div>
+        <div><h2>BluePad</h2><div class="ver">0.1.0 · com.acheronian.bluepad</div></div>
+      </div>
+      <div class="panel about-lines">
+        Bluetooth gamepad manager for webOS&nbsp;4.x — app-owned HID sessions with the
+        stock path as fallback; input delivered to streaming apps.<br>
+        Homebrew Channel · MIT / Apache-2.0 · punktfunk-style native Rust + Skia.
+      </div>`;
+  }
 
-  // pairing sheet: step list
-  const order = ['scan', 'found', 'session', 'connected'];
-  const cur = order.indexOf(state.pairPhase);
-  const STEPS = ['Pad visible (PS + Create held)', 'L2CAP channels open', 'HID descriptor authored · uhid registered', 'Input flowing'];
-  document.getElementById('vB-steps').innerHTML = STEPS.map((s, i) => {
-    const cls = state.pairPhase === 'idle' ? 'todo' : i < cur ? 'done' : i === cur ? 'now' : 'todo';
-    return `<div class="step ${cls}"><span class="n">${i < cur ? '✓' : i + 1}</span>${s}</div>`;
-  }).join('');
-  document.getElementById('vB-pair-sub').innerHTML =
-    state.pairPhase === 'connected' ? 'The pad is ready. Press A to finish.' :
-    state.pairPhase === 'idle' ? '' : 'Press A to advance · Back aborts';
+  // ---- pair / device-search screen: sub.search picks the structure ----
+  const P = document.getElementById('vB-pair-root');
+  const ph = PAIR[state.pairPhase];
+  if (sub.search === 2) {
+    P.innerHTML = `<div class="center-col">
+      <div class="ring ${state.pairPhase === 'scan' ? 'scanning' : ''}"><div class="ring-fill"></div>${icon('bluetooth', 96)}</div>
+      <div class="pair-title">${ph ? ph.title : 'Pairing'}</div>
+      <div class="pair-sub">${ph ? ph.sub : ''}</div>
+      <div class="pair-step">${ph ? ph.step : ''}</div>
+    </div>`;
+  } else if (sub.search === 3) {
+    const dev = state.pairPhase === 'scan'
+      ? [0, 1, 2].map(i => `<div class="skel" style="animation-delay:${i * 0.25}s"></div>`).join('')
+      : `<div class="set-row panel">
+           <span class="glyph">${icon('gamepad', 30)}</span>
+           <div><div class="name">DualSense · rev B</div>
+             <div class="desc">${state.pairPhase === 'found' ? 'BD 88:66:AA:5F:12:34 · signal strong'
+               : state.pairPhase === 'session' ? 'Authoring HID descriptor · registering uhid device'
+               : 'uhid device live · input flowing'}</div></div>
+           <div class="right">${chipHTML(state.pairPhase === 'connected' ? 'connected' : 'connecting')}</div>
+         </div>`;
+    P.innerHTML = `<div class="split">
+      <div class="split-left">
+        ${icon('bluetooth', 64)}
+        <div class="pair-title">Searching for pads</div>
+        <div class="pair-sub">Hold <b>PS + Create</b> on the controller until the light bar flashes.
+          Pads discovered nearby appear here.</div>
+        <div class="pair-step">${state.pairPhase === 'connected' ? 'Press A to finish' : 'Press A to advance · Back aborts'}</div>
+      </div>
+      <div class="split-right">
+        <div class="section-label">Discovered devices</div>
+        ${dev}
+      </div>
+    </div>`;
+  } else {
+    const order = ['scan', 'found', 'session', 'connected'];
+    const cur = order.indexOf(state.pairPhase);
+    const STEPS = ['Pad visible (PS + Create held)', 'L2CAP channels open', 'HID descriptor authored · uhid registered', 'Input flowing'];
+    P.innerHTML = `<div class="sheet panel">
+      <h2>Add a pad</h2>
+      <div class="steps">${STEPS.map((s, i) => {
+        const cls = state.pairPhase === 'idle' ? 'todo' : i < cur ? 'done' : i === cur ? 'now' : 'todo';
+        return `<div class="step ${cls}"><span class="n">${i < cur ? '✓' : i + 1}</span>${s}</div>`;
+      }).join('')}</div>
+      <div class="pair-sub" style="text-align:left">
+        ${state.pairPhase === 'connected' ? 'The pad is ready. Press A to finish.' :
+          state.pairPhase === 'idle' ? '' : 'Press A to advance · Back aborts'}</div>
+    </div>`;
+  }
 }
 // variant B tab action reuses ACTIONS.tab but for stack B:
 ACTIONS.tab = el => {
