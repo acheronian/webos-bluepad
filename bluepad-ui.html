@@ -18,10 +18,10 @@
     Settings 1 section rows · 2 master-detail panes · 3 category cards (accordion)
     About    1 hero + lines · 2 centered mark · 3 document sections
     Search   1 step sheet · 2 center ring · 3 split search-results view
-  Round 2 verdict: settings 1, about 2, search 3 — now the defaults.
-  Round 3 tweak (search 3): the results drawer is near-opaque, and the search
-  view helps you pick what you're connecting — PS5 / PS4 / Xbox / other —
-  with per-type pairing instructions.
+  Round 2 verdict: settings 1, about 2, search 1 (step sheet) — defaults.
+  Round 3 tweaks (folded into the winning search sheet): the sheet is
+  near-opaque, and it helps you pick what you're connecting — PS5 / PS4 /
+  Xbox / other — with per-type pairing steps.
   Variant A/C remain switchable via #variant=A|C for reference (B is default).
 
   Drive it like the TV: arrows = D-pad, Enter = A/OK, Backspace/Esc = Back.
@@ -258,7 +258,12 @@
   #vB .split-left .pair-sub { text-align: left; max-width: none; }
   #vB .split-right { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 14px; }
   #vB .skel { height: 78px; border-radius: var(--radius); background: rgba(255,255,255,.05); animation: pulse 1.6s infinite; }
-  /* search 3 (round 3): near-opaque results drawer + device-type help */
+  /* round 3: near-opaque drawer/sheet + device-type help */
+  #vB .sheet { background: rgba(12, 24, 68, 0.92); padding: 40px 44px; gap: 20px; overflow-y: auto; }
+  #vB .sheet .devtype { padding: 10px 16px; }
+  #vB .sheet .devtype .name { font-size: 19px; }
+  #vB .sheet .devtype .sub { font-size: 14px; }
+  #vB .sheet .devtype .glyph { display: none; }
   #vB .drawer { background: rgba(12, 24, 68, 0.92); padding: 26px 30px; }
   #vB .drawer .drawer-head { font-size: 18px; font-weight: 600; letter-spacing: .12em;
     text-transform: uppercase; color: var(--ink-3); margin-bottom: 16px; }
@@ -513,7 +518,7 @@ const VARIANTS = [
   { key: 'C', name: 'Ring-first' },
 ];
 let curVariant;
-const sub = { set: 1, about: 2, search: 3 };   // round-2 verdicts: settings 1, about 2, search 3
+const sub = { set: 1, about: 2, search: 1 };   // round-2 verdicts: settings 1, about 2, search 1
 const SUBS = [
   { key: 'set', label: 'Settings' },
   { key: 'about', label: 'About' },
@@ -754,13 +759,13 @@ const ACTIONS = {
 /* What you can connect (search 3): per-type pairing instructions shown as help. */
 const DEV_TYPES = {
   ps5:   { name: 'PS5 · DualSense',       desc: 'Sony Wireless Controller', found: 'DualSense · rev B',
-           hint: 'Hold PS + Create until the light bar double-flashes' },
+           short: 'PS + Create held',    hint: 'Hold PS + Create until the light bar double-flashes' },
   ps4:   { name: 'PS4 · DualShock 4',     desc: 'Sony Wireless Controller', found: 'DualShock 4',
-           hint: 'Hold Share + PS until the light bar flashes' },
+           short: 'Share + PS held',    hint: 'Hold Share + PS until the light bar flashes' },
   xbox:  { name: 'Xbox · One S / Series', desc: 'Xbox Wireless Controller', found: 'Xbox One S',
-           hint: 'Hold Xbox + Pair (near the USB port) until the button blinks' },
+           short: 'Xbox + Pair held',   hint: 'Hold Xbox + Pair (near the USB port) until the button blinks' },
   other: { name: 'Other gamepad',         desc: 'Any Bluetooth HID pad',   found: 'HID gamepad',
-           hint: 'Put the pad in Bluetooth pairing mode (see its manual)' },
+           short: 'pairing mode entered', hint: 'Put the pad in Bluetooth pairing mode (see its manual)' },
 };
 
 const PAIR = {
@@ -1033,18 +1038,25 @@ function renderB() {
       </div>
     </div>`;
   } else {
+    const dt = DEV_TYPES[state.pairDeviceType];
     const order = ['scan', 'found', 'session', 'connected'];
     const cur = order.indexOf(state.pairPhase);
-    const STEPS = ['Pad visible (PS + Create held)', 'L2CAP channels open', 'HID descriptor authored · uhid registered', 'Input flowing'];
+    const STEPS = [`Pad visible (${dt.short})`, 'L2CAP channels open', 'HID descriptor authored · uhid registered', 'Input flowing'];
     P.innerHTML = `<div class="sheet panel">
       <h2>Add a pad</h2>
+      <div class="pair-sub" style="text-align:left">Pick what you want to connect — the pairing steps update to match.</div>
+      <div class="devtypes">${Object.entries(DEV_TYPES).map(([id, d]) => `
+        <div class="devtype focusable ${state.pairDeviceType === id ? 'on' : ''}" data-focus-id="devtype-${id}" data-select="devtype" data-devtype="${id}">
+          <span class="glyph">${icon('gamepad', 22)}</span>
+          <div><div class="name">${d.name}</div><div class="sub">${d.desc}</div></div>
+        </div>`).join('')}</div>
       <div class="steps">${STEPS.map((s, i) => {
         const cls = state.pairPhase === 'idle' ? 'todo' : i < cur ? 'done' : i === cur ? 'now' : 'todo';
         return `<div class="step ${cls}"><span class="n">${i < cur ? '✓' : i + 1}</span>${s}</div>`;
       }).join('')}</div>
       <div class="pair-sub" style="text-align:left">
-        ${state.pairPhase === 'connected' ? 'The pad is ready. Press A to finish.' :
-          state.pairPhase === 'idle' ? '' : 'Press A to advance · Back aborts'}</div>
+        ${dt.hint} · ${state.pairPhase === 'connected' ? 'press A to finish' :
+          state.pairPhase === 'idle' ? 'press A to advance' : 'press A to advance · Back aborts'}</div>
     </div>`;
   }
 }
