@@ -6,18 +6,25 @@
   gets redrawn as real PNG assets for appinfo, the rest stays on the
   prototype branch.
 
-  Round 3: rounds 1 (pad glyph / mass / line) and 2 (B-monogram) are OFF THE
-  TABLE. The maintainer's own baseline art is adopted wholesale — rounded
-  blue-gradient badge, light gamepad (pill + two circular grips), blue
-  d-pad, SNES-style four-color button diamond, cyan Bluetooth rune over a
-  soft glow — and five variants explore what's still open: surface
-  treatment, badge color, rune geometry, hierarchy.
+  Round 4. History: round 1 (pad glyph / mass / line) and round 2
+  (B-monogram) rejected; round 3 adopted the maintainer's baseline art
+  (rounded blue-gradient badge, light pill+grips pad, blue d-pad, SNES
+  four-color diamond, cyan Bluetooth rune over a glow) but its "rune
+  corrected" variant was WRONG — the baseline's rune geometry is the
+  canonical Bluetooth bind rune (verified against Material / MDI /
+  Font Awesome renderings: spine + right double wedge + left chevron
+  apexing at the spine's middle). It is kept everywhere now.
 
-    1 "Baseline"       the provided art, untouched — the reference
-    2 "Flat"           every gradient and glow removed, solid fills
-    3 "Dark badge"     same art rebased onto the brand navy ground
-    4 "Rune corrected" canonical Bluetooth bind rune instead of the zigzag
-    5 "Rune-forward"   rune enlarged + stronger glow, pad details dimmed
+  Variants 1-3 keep the baseline art as-is; 4-7 play creatively around
+  the (correct) rune:
+
+    1 "Baseline"           the provided art, untouched — the reference
+    2 "Flat"               every gradient and glow removed, solid fills
+    3 "Dark badge"         same art rebased onto the brand navy ground
+    4 "Rune hero"          rune scaled to span the pad, details dimmed
+    5 "Rune tilted 45°"    the rune rotated about the pad's center
+    6 "Pairing ripples"    cyan rings radiate from the rune across the badge
+    7 "Neon rune"          rune as a neon tube: cyan halo, near-white core
 
   Switchable via the floating bar or ←/→; each shown across the full
   appinfo set: icon.png 130×130, icon_large.png 320×320, small-size
@@ -116,20 +123,21 @@
 <header>
   <div class="kicker">Throwaway prototype · webos-bluepad#14</div>
   <h1>BluePad — icon &amp; splash concepts</h1>
-  <p>Round 3 — <strong>your baseline art, adopted wholesale</strong>: rounded
-  blue-gradient badge, light gamepad, blue d-pad, SNES-style four-color diamond, cyan
-  Bluetooth rune over a soft glow. Everything before is off the table. Five variants
-  explore what's still open: <strong>1 · Baseline</strong> (untouched reference),
-  <strong>2 · Flat</strong> (gradients and glow removed), <strong>3 · Dark badge</strong>
-  (rebased onto the brand navy), <strong>4 · Rune corrected</strong> (canonical bind rune
-  instead of the zigzag), <strong>5 · Rune-forward</strong> (rune enlarged, pad details
-  dimmed). Flip with the bar below or ←/→. Each covers the full appinfo set:
-  <code>icon.png</code> 130×130, <code>icon_large.png</code> 320×320, small-size
-  legibility, launcher context, <code>splash.png</code>, and
+  <p>Round 4 — <strong>your baseline rune was right all along</strong>: its geometry
+  (spine + right double wedge + left chevron apexing at the spine's middle) is the
+  canonical Bluetooth bind rune, verified against Material, MDI, and Font Awesome
+  renderings. Round 3's "corrected" rune was wrong and is gone; your rune is kept in
+  every variant. <strong>1–3</strong> hold your art as-is (baseline, flat, dark badge);
+  <strong>4–7</strong> play creatively around the rune: <strong>4 · Rune hero</strong>
+  (scaled to span the pad, details dimmed), <strong>5 · Rune tilted 45°</strong>,
+  <strong>6 · Pairing ripples</strong> (cyan rings radiating across the badge),
+  <strong>7 · Neon rune</strong>. Flip with the bar below or ←/→. Each covers the full
+  appinfo set: <code>icon.png</code> 130×130, <code>icon_large.png</code> 320×320,
+  small-size legibility, launcher context, <code>splash.png</code>, and
   <code>iconColor</code>.</p>
 </header>
 
-<!-- shared defs: gradients reused by all five variants -->
+<!-- shared defs: gradients reused by all variants -->
 <svg width="0" height="0" style="position:absolute">
   <defs>
     <linearGradient id="bgBlue" x1="0" y1="0" x2="0" y2="1">
@@ -149,6 +157,36 @@
       <stop offset="0" stop-color="#5fe6ff" stop-opacity="0.85"/>
       <stop offset="1" stop-color="#5fe6ff" stop-opacity="0"/>
     </radialGradient>
+
+    <!-- the maintainer's rune, proven canonical — reused by every variant -->
+    <g id="runeBase" fill="none"
+      stroke-linecap="round" stroke-linejoin="round">
+      <path d="M256 250 L256 360"/>
+      <path d="M256 250 L283.5 277.5 L256 305 L283.5 332.5 L256 360"/>
+      <path d="M228.5 277.5 L256 305 L228.5 332.5"/>
+    </g>
+    <!-- the pad, d-pad and diamond, reused by every variant -->
+    <g id="padBase">
+      <rect x="165" y="223" width="182" height="164" fill="url(#padLight)"/>
+      <circle cx="165" cy="305" r="82" fill="url(#padLight)"/>
+      <circle cx="347" cy="305" r="82" fill="url(#padLight)"/>
+    </g>
+    <g id="detailsBase">
+      <rect x="150" y="255" width="30" height="100" rx="10" fill="#123f9c"/>
+      <rect x="115" y="290" width="100" height="30" rx="10" fill="#123f9c"/>
+      <circle cx="347" cy="273" r="15" fill="#123f9c"/>
+      <circle cx="315" cy="305" r="15" fill="#1a5fd8"/>
+      <circle cx="379" cy="305" r="15" fill="#2fb4ff"/>
+      <circle cx="347" cy="337" r="15" fill="#7ad9ff"/>
+    </g>
+    <g id="detailsDim">
+      <rect x="150" y="255" width="30" height="100" rx="10" fill="#a9c3ee"/>
+      <rect x="115" y="290" width="100" height="30" rx="10" fill="#a9c3ee"/>
+      <circle cx="347" cy="273" r="15" fill="#a9c3ee"/>
+      <circle cx="315" cy="305" r="15" fill="#a9c3ee"/>
+      <circle cx="379" cy="305" r="15" fill="#a9c3ee"/>
+      <circle cx="347" cy="337" r="15" fill="#a9c3ee"/>
+    </g>
   </defs>
 </svg>
 
@@ -160,22 +198,9 @@
   <symbol id="icon1" viewBox="0 0 512 512">
     <rect x="16" y="16" width="480" height="480" rx="104" fill="url(#bgBlue)"/>
     <circle cx="256" cy="305" r="88" fill="url(#glowCyan)"/>
-    <g>
-      <rect x="165" y="223" width="182" height="164" fill="url(#padLight)"/>
-      <circle cx="165" cy="305" r="82" fill="url(#padLight)"/>
-      <circle cx="347" cy="305" r="82" fill="url(#padLight)"/>
-      <rect x="150" y="255" width="30" height="100" rx="10" fill="#123f9c"/>
-      <rect x="115" y="290" width="100" height="30" rx="10" fill="#123f9c"/>
-      <circle cx="347" cy="273" r="15" fill="#123f9c"/>
-      <circle cx="315" cy="305" r="15" fill="#1a5fd8"/>
-      <circle cx="379" cy="305" r="15" fill="#2fb4ff"/>
-      <circle cx="347" cy="337" r="15" fill="#7ad9ff"/>
-      <g stroke="#00c8ff" stroke-width="13" stroke-linecap="round" stroke-linejoin="round" fill="none">
-        <path d="M256 250 L256 360"/>
-        <path d="M256 250 L283.5 277.5 L256 305 L283.5 332.5 L256 360"/>
-        <path d="M228.5 277.5 L256 305 L228.5 332.5"/>
-      </g>
-    </g>
+    <use href="#padBase"/>
+    <use href="#detailsBase"/>
+    <use href="#runeBase" stroke="#00c8ff" stroke-width="13"/>
   </symbol>
 
   <!-- 2: flat — every gradient and glow removed -->
@@ -185,84 +210,67 @@
       <rect x="165" y="223" width="182" height="164" fill="#f4faff"/>
       <circle cx="165" cy="305" r="82" fill="#f4faff"/>
       <circle cx="347" cy="305" r="82" fill="#f4faff"/>
-      <rect x="150" y="255" width="30" height="100" rx="10" fill="#123f9c"/>
-      <rect x="115" y="290" width="100" height="30" rx="10" fill="#123f9c"/>
-      <circle cx="347" cy="273" r="15" fill="#123f9c"/>
-      <circle cx="315" cy="305" r="15" fill="#1a5fd8"/>
-      <circle cx="379" cy="305" r="15" fill="#2fb4ff"/>
-      <circle cx="347" cy="337" r="15" fill="#7ad9ff"/>
-      <g stroke="#00c8ff" stroke-width="13" stroke-linecap="round" stroke-linejoin="round" fill="none">
-        <path d="M256 250 L256 360"/>
-        <path d="M256 250 L283.5 277.5 L256 305 L283.5 332.5 L256 360"/>
-        <path d="M228.5 277.5 L256 305 L228.5 332.5"/>
-      </g>
     </g>
+    <use href="#detailsBase"/>
+    <use href="#runeBase" stroke="#00c8ff" stroke-width="13"/>
   </symbol>
 
   <!-- 3: dark badge — same art on the brand navy ground -->
   <symbol id="icon3" viewBox="0 0 512 512">
     <rect x="16" y="16" width="480" height="480" rx="104" fill="url(#bgDark)"/>
     <circle cx="256" cy="305" r="88" fill="url(#glowCyan)"/>
-    <g>
-      <rect x="165" y="223" width="182" height="164" fill="url(#padLight)"/>
-      <circle cx="165" cy="305" r="82" fill="url(#padLight)"/>
-      <circle cx="347" cy="305" r="82" fill="url(#padLight)"/>
-      <rect x="150" y="255" width="30" height="100" rx="10" fill="#123f9c"/>
-      <rect x="115" y="290" width="100" height="30" rx="10" fill="#123f9c"/>
-      <circle cx="347" cy="273" r="15" fill="#123f9c"/>
-      <circle cx="315" cy="305" r="15" fill="#1a5fd8"/>
-      <circle cx="379" cy="305" r="15" fill="#2fb4ff"/>
-      <circle cx="347" cy="337" r="15" fill="#7ad9ff"/>
-      <g stroke="#00c8ff" stroke-width="13" stroke-linecap="round" stroke-linejoin="round" fill="none">
-        <path d="M256 250 L256 360"/>
-        <path d="M256 250 L283.5 277.5 L256 305 L283.5 332.5 L256 360"/>
-        <path d="M228.5 277.5 L256 305 L228.5 332.5"/>
-      </g>
-    </g>
+    <use href="#padBase"/>
+    <use href="#detailsBase"/>
+    <use href="#runeBase" stroke="#00c8ff" stroke-width="13"/>
   </symbol>
 
-  <!-- 4: rune corrected — canonical bind rune, everything else baseline -->
+  <!-- 4: rune hero — the rune spans the pad, details dimmed -->
   <symbol id="icon4" viewBox="0 0 512 512">
     <rect x="16" y="16" width="480" height="480" rx="104" fill="url(#bgBlue)"/>
-    <circle cx="256" cy="305" r="88" fill="url(#glowCyan)"/>
-    <g>
-      <rect x="165" y="223" width="182" height="164" fill="url(#padLight)"/>
-      <circle cx="165" cy="305" r="82" fill="url(#padLight)"/>
-      <circle cx="347" cy="305" r="82" fill="url(#padLight)"/>
-      <rect x="150" y="255" width="30" height="100" rx="10" fill="#123f9c"/>
-      <rect x="115" y="290" width="100" height="30" rx="10" fill="#123f9c"/>
-      <circle cx="347" cy="273" r="15" fill="#123f9c"/>
-      <circle cx="315" cy="305" r="15" fill="#1a5fd8"/>
-      <circle cx="379" cy="305" r="15" fill="#2fb4ff"/>
-      <circle cx="347" cy="337" r="15" fill="#7ad9ff"/>
-      <g stroke="#00c8ff" stroke-width="13" stroke-linecap="round" stroke-linejoin="round" fill="none">
-        <path d="M256 250 L256 360"/>
-        <path d="M256 250 L228.5 305 L256 360"/>
-        <path d="M256 250 L283.5 305 L256 360"/>
-      </g>
+    <circle cx="256" cy="305" r="118" fill="url(#glowCyan)"/>
+    <use href="#padBase"/>
+    <use href="#detailsDim"/>
+    <g stroke="#00c8ff" stroke-width="16" fill="none"
+      stroke-linecap="round" stroke-linejoin="round">
+      <path d="M256 223 L256 387"/>
+      <path d="M256 223 L297 264 L256 305 L297 346 L256 387"/>
+      <path d="M215 264 L256 305 L215 346"/>
     </g>
   </symbol>
 
-  <!-- 5: rune-forward — canonical rune enlarged, stronger glow, details dimmed -->
+  <!-- 5: rune tilted 45° — rotated about the pad's center -->
   <symbol id="icon5" viewBox="0 0 512 512">
     <rect x="16" y="16" width="480" height="480" rx="104" fill="url(#bgBlue)"/>
-    <circle cx="256" cy="305" r="112" fill="url(#glowCyan)"/>
-    <g>
-      <rect x="165" y="223" width="182" height="164" fill="url(#padLight)"/>
-      <circle cx="165" cy="305" r="82" fill="url(#padLight)"/>
-      <circle cx="347" cy="305" r="82" fill="url(#padLight)"/>
-      <rect x="150" y="255" width="30" height="100" rx="10" fill="#a9c3ee"/>
-      <rect x="115" y="290" width="100" height="30" rx="10" fill="#a9c3ee"/>
-      <circle cx="347" cy="273" r="15" fill="#a9c3ee"/>
-      <circle cx="315" cy="305" r="15" fill="#a9c3ee"/>
-      <circle cx="379" cy="305" r="15" fill="#a9c3ee"/>
-      <circle cx="347" cy="337" r="15" fill="#a9c3ee"/>
-      <g stroke="#00c8ff" stroke-width="15" stroke-linecap="round" stroke-linejoin="round" fill="none">
-        <path d="M256 225 L256 385"/>
-        <path d="M256 225 L221 305 L256 385"/>
-        <path d="M256 225 L291 305 L256 385"/>
-      </g>
+    <circle cx="256" cy="305" r="88" fill="url(#glowCyan)"/>
+    <use href="#padBase"/>
+    <use href="#detailsBase"/>
+    <g transform="rotate(45 256 305)">
+      <use href="#runeBase" stroke="#00c8ff" stroke-width="13"/>
     </g>
+  </symbol>
+
+  <!-- 6: pairing ripples — the pad is broadcasting -->
+  <symbol id="icon6" viewBox="0 0 512 512">
+    <rect x="16" y="16" width="480" height="480" rx="104" fill="url(#bgBlue)"/>
+    <g fill="none" stroke="#66e4ff">
+      <circle cx="256" cy="305" r="115" stroke-width="7" opacity="0.5"/>
+      <circle cx="256" cy="305" r="148" stroke-width="7" opacity="0.32"/>
+      <circle cx="256" cy="305" r="182" stroke-width="7" opacity="0.18"/>
+    </g>
+    <circle cx="256" cy="305" r="88" fill="url(#glowCyan)"/>
+    <use href="#padBase"/>
+    <use href="#detailsBase"/>
+    <use href="#runeBase" stroke="#00c8ff" stroke-width="13"/>
+  </symbol>
+
+  <!-- 7: neon rune — cyan halo under a near-white core -->
+  <symbol id="icon7" viewBox="0 0 512 512">
+    <rect x="16" y="16" width="480" height="480" rx="104" fill="url(#bgBlue)"/>
+    <circle cx="256" cy="305" r="88" fill="url(#glowCyan)"/>
+    <use href="#padBase"/>
+    <use href="#detailsBase"/>
+    <use href="#runeBase" stroke="#35d5ff" stroke-width="21" opacity="0.45"/>
+    <use href="#runeBase" stroke="#eafcff" stroke-width="10"/>
   </symbol>
 
   <!-- splashes: same 16:9 composition, only the mark varies -->
@@ -316,6 +324,24 @@
     <text x="480" y="368" text-anchor="middle" fill="rgba(255,255,255,0.62)"
       font-size="17" font-family="Geist, Inter, system-ui, sans-serif">Bluetooth gamepads for webOS</text>
   </symbol>
+  <symbol id="splash6" viewBox="0 0 960 540">
+    <use href="#splashBase"/>
+    <use href="#icon6" x="390" y="92" width="180" height="180"/>
+    <text x="480" y="330" text-anchor="middle" fill="#ffffff" font-size="46"
+      font-weight="700" letter-spacing="1"
+      font-family="Geist, Inter, system-ui, sans-serif">BluePad</text>
+    <text x="480" y="368" text-anchor="middle" fill="rgba(255,255,255,0.62)"
+      font-size="17" font-family="Geist, Inter, system-ui, sans-serif">Bluetooth gamepads for webOS</text>
+  </symbol>
+  <symbol id="splash7" viewBox="0 0 960 540">
+    <use href="#splashBase"/>
+    <use href="#icon7" x="390" y="92" width="180" height="180"/>
+    <text x="480" y="330" text-anchor="middle" fill="#ffffff" font-size="46"
+      font-weight="700" letter-spacing="1"
+      font-family="Geist, Inter, system-ui, sans-serif">BluePad</text>
+    <text x="480" y="368" text-anchor="middle" fill="rgba(255,255,255,0.62)"
+      font-size="17" font-family="Geist, Inter, system-ui, sans-serif">Bluetooth gamepads for webOS</text>
+  </symbol>
 
   <!-- muted dummy launcher tiles -->
   <symbol id="dummyStream" viewBox="0 0 320 320">
@@ -343,9 +369,10 @@
 <!-- ============ variant 1 ============ -->
 <section class="variant" id="v1">
   <h2>1 · Baseline — as provided</h2>
-  <p class="gist">Your art, exactly as handed over: rounded blue-gradient badge, light
-  pad with circular grips, blue d-pad, SNES-style four-color diamond, cyan rune over a
-  soft glow. Untouched — the reference every other variant is measured against.</p>
+  <p class="gist">Your art, exactly as handed over — and its rune is the canonical
+  Bluetooth bind rune. Rounded blue-gradient badge, light pad with circular grips,
+  blue d-pad, SNES-style four-color diamond, cyan rune over a soft glow. The reference
+  every other variant is measured against.</p>
 
   <div class="panel">
     <h3>icon_large.png · 320×320 &nbsp;+&nbsp; icon.png · 130×130 &nbsp;+&nbsp; legibility</h3>
@@ -492,11 +519,10 @@
 
 <!-- ============ variant 4 ============ -->
 <section class="variant" id="v4">
-  <h2>4 · Rune corrected</h2>
-  <p class="gist">Identical to the baseline except one thing: the rune is the canonical
-  Bluetooth bind rune — spine plus full left "&lt;" and right "&gt;" chevrons — instead
-  of the zigzag-through-center. Isolates a single question: which rune geometry reads
-  as "Bluetooth" at a glance?</p>
+  <h2>4 · Rune hero</h2>
+  <p class="gist">Your rune — now proven canonical — scaled to span the pad from top to
+  bottom, with a wider glow and a heavier stroke; d-pad and buttons dimmed to a quiet
+  tint so the connection mark leads. The pad whispers, the rune shouts.</p>
 
   <div class="panel">
     <h3>icon_large.png · 320×320 &nbsp;+&nbsp; icon.png · 130×130 &nbsp;+&nbsp; legibility</h3>
@@ -535,17 +561,18 @@
     <div class="appinfo">
       <div class="swatch" style="background:#1557d8"></div>
       <div class="meta"><b>#1557d8 — the badge's mid blue</b>
-        <p>Same badge as the baseline, so the same ambient color.</p></div>
+        <p>Same badge as the baseline; the hierarchy shift lives entirely inside the
+        tile.</p></div>
     </div>
   </div>
 </section>
 
 <!-- ============ variant 5 ============ -->
 <section class="variant" id="v5">
-  <h2>5 · Rune-forward</h2>
-  <p class="gist">The Bluetooth story leads: the canonical rune enlarged with a
-  stronger glow, d-pad and buttons dimmed to a quiet tint. The baseline's hierarchy
-  flipped — the pad whispers, the connection shouts.</p>
+  <h2>5 · Rune tilted 45°</h2>
+  <p class="gist">The round-2 tilt idea applied to the baseline: the canonical rune
+  rotated 45° about the pad's center, everything else untouched. A touch more dynamic —
+  or a touch less settled, depending on your eye.</p>
 
   <div class="panel">
     <h3>icon_large.png · 320×320 &nbsp;+&nbsp; icon.png · 130×130 &nbsp;+&nbsp; legibility</h3>
@@ -584,8 +611,105 @@
     <div class="appinfo">
       <div class="swatch" style="background:#1557d8"></div>
       <div class="meta"><b>#1557d8 — the badge's mid blue</b>
-        <p>Same badge as the baseline; the hierarchy shift lives entirely inside the
-        tile.</p></div>
+        <p>Same badge as the baseline; only the rune moves.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ variant 6 ============ -->
+<section class="variant" id="v6">
+  <h2>6 · Pairing ripples</h2>
+  <p class="gist">The pad is broadcasting: three cyan rings radiate from the rune
+  across the badge behind the pad, like the pairing pulse in flight. Everything else is
+  the baseline — the story just gains a signal.</p>
+
+  <div class="panel">
+    <h3>icon_large.png · 320×320 &nbsp;+&nbsp; icon.png · 130×130 &nbsp;+&nbsp; legibility</h3>
+    <div class="hero-row">
+      <div class="icon-slot"><div class="frame"><svg width="220" height="220"><use href="#icon6"/></svg></div>
+        <span class="asset-label">320×320 · icon_large</span></div>
+      <div class="icon-slot"><div class="frame"><svg width="130" height="130"><use href="#icon6"/></svg></div>
+        <span class="asset-label">130×130 · icon</span>
+        <div class="small-row">
+          <div class="s"><svg width="96" height="96"><use href="#icon6"/></svg><span>96</span></div>
+          <div class="s"><svg width="64" height="64"><use href="#icon6"/></svg><span>64</span></div>
+          <div class="s"><svg width="48" height="48"><use href="#icon6"/></svg><span>48</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Launcher context — webOS 4 ribbon</h3>
+    <div class="launcher">
+      <div class="tile"><div class="art"><svg><use href="#dummyStream"/></svg></div><div class="name">Stream</div></div>
+      <div class="tile"><div class="art"><svg><use href="#dummyMusic"/></svg></div><div class="name">Music</div></div>
+      <div class="tile focus"><div class="art"><svg><use href="#icon6"/></svg></div><div class="name">BluePad</div></div>
+      <div class="tile"><div class="art"><svg><use href="#dummyPhotos"/></svg></div><div class="name">Photos</div></div>
+      <div class="tile"><div class="art"><svg><use href="#dummySettings"/></svg></div><div class="name">Settings</div></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>splash.png · cold start</h3>
+    <svg class="splash-mock"><use href="#splash6"/></svg>
+  </div>
+
+  <div class="panel">
+    <h3>iconColor</h3>
+    <div class="appinfo">
+      <div class="swatch" style="background:#1557d8"></div>
+      <div class="meta"><b>#1557d8 — the badge's mid blue</b>
+        <p>Same badge as the baseline; the ripples live on top of it.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ variant 7 ============ -->
+<section class="variant" id="v7">
+  <h2>7 · Neon rune</h2>
+  <p class="gist">The rune lit as a neon tube: a wide cyan halo under a near-white core,
+  over the standard glow. The pad stays baseline; only the rune changes material —
+  the connection becomes the brightest thing on the tile.</p>
+
+  <div class="panel">
+    <h3>icon_large.png · 320×320 &nbsp;+&nbsp; icon.png · 130×130 &nbsp;+&nbsp; legibility</h3>
+    <div class="hero-row">
+      <div class="icon-slot"><div class="frame"><svg width="220" height="220"><use href="#icon7"/></svg></div>
+        <span class="asset-label">320×320 · icon_large</span></div>
+      <div class="icon-slot"><div class="frame"><svg width="130" height="130"><use href="#icon7"/></svg></div>
+        <span class="asset-label">130×130 · icon</span>
+        <div class="small-row">
+          <div class="s"><svg width="96" height="96"><use href="#icon7"/></svg><span>96</span></div>
+          <div class="s"><svg width="64" height="64"><use href="#icon7"/></svg><span>64</span></div>
+          <div class="s"><svg width="48" height="48"><use href="#icon7"/></svg><span>48</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Launcher context — webOS 4 ribbon</h3>
+    <div class="launcher">
+      <div class="tile"><div class="art"><svg><use href="#dummyStream"/></svg></div><div class="name">Stream</div></div>
+      <div class="tile"><div class="art"><svg><use href="#dummyMusic"/></svg></div><div class="name">Music</div></div>
+      <div class="tile focus"><div class="art"><svg><use href="#icon7"/></svg></div><div class="name">BluePad</div></div>
+      <div class="tile"><div class="art"><svg><use href="#dummyPhotos"/></svg></div><div class="name">Photos</div></div>
+      <div class="tile"><div class="art"><svg><use href="#dummySettings"/></svg></div><div class="name">Settings</div></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>splash.png · cold start</h3>
+    <svg class="splash-mock"><use href="#splash7"/></svg>
+  </div>
+
+  <div class="panel">
+    <h3>iconColor</h3>
+    <div class="appinfo">
+      <div class="swatch" style="background:#1557d8"></div>
+      <div class="meta"><b>#1557d8 — the badge's mid blue</b>
+        <p>Same badge as the baseline; the neon lives on the rune alone.</p></div>
     </div>
   </div>
 </section>
@@ -610,8 +734,10 @@
     { k: '1', n: 'Baseline — as provided' },
     { k: '2', n: 'Flat — no glow' },
     { k: '3', n: 'Dark badge' },
-    { k: '4', n: 'Rune corrected' },
-    { k: '5', n: 'Rune-forward' },
+    { k: '4', n: 'Rune hero' },
+    { k: '5', n: 'Rune tilted 45°' },
+    { k: '6', n: 'Pairing ripples' },
+    { k: '7', n: 'Neon rune' },
   ];
   const label = document.getElementById('label');
 
