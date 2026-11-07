@@ -6,25 +6,21 @@
   gets redrawn as real PNG assets for appinfo, the rest stays on the
   prototype branch.
 
-  Round 4. History: round 1 (pad glyph / mass / line) and round 2
-  (B-monogram) rejected; round 3 adopted the maintainer's baseline art
-  (rounded blue-gradient badge, light pill+grips pad, blue d-pad, SNES
-  four-color diamond, cyan Bluetooth rune over a glow) but its "rune
-  corrected" variant was WRONG — the baseline's rune geometry is the
-  canonical Bluetooth bind rune (verified against Material / MDI /
-  Font Awesome renderings: spine + right double wedge + left chevron
-  apexing at the spine's middle). It is kept everywhere now.
+  Round 5 — near-verdict. History: rounds 1-2 rejected; round 3 adopted
+  the maintainer's baseline art; round 4 confirmed the baseline's rune is
+  the canonical Bluetooth bind rune and played creatively around it.
+  Round 5 decision: the BASELINE art ships as the CONTROLLER ONLY — the
+  rounded-square badge is dropped. The webOS 4 launcher ribbon (long
+  slanted full-color parallelogram cards, each an app's iconColor with
+  its icon on top — per the maintainer's device) now supplies the color,
+  so iconColor becomes load-bearing.
 
-  Variants 1-3 keep the baseline art as-is; 4-7 play creatively around
-  the (correct) rune:
+    8 "Controller only"   the shipping candidate: baseline art, no badge,
+                          on transparency; card color via iconColor
+    1-7                   previous rounds, kept for reference
 
-    1 "Baseline"           the provided art, untouched — the reference
-    2 "Flat"               every gradient and glow removed, solid fills
-    3 "Dark badge"         same art rebased onto the brand navy ground
-    4 "Rune hero"          rune scaled to span the pad, details dimmed
-    5 "Rune tilted 45°"    the rune rotated about the pad's center
-    6 "Pairing ripples"    cyan rings radiate from the rune across the badge
-    7 "Neon rune"          rune as a neon tube: cyan halo, near-white core
+  The launcher preview in every variant now mirrors the real webOS 4
+  ribbon: skewed full-color cards with the icon composited on top.
 
   Switchable via the floating bar or ←/→; each shown across the full
   appinfo set: icon.png 130×130, icon_large.png 320×320, small-size
@@ -75,20 +71,24 @@
   .icon-slot { text-align: center; }
   .icon-slot .frame { background: rgba(255,255,255,0.05); border: 1px solid var(--hairline);
     border-radius: 10px; padding: 10px; display: inline-block; }
+  .icon-slot .frame.checker {
+    background: repeating-conic-gradient(#18203a 0% 25%, #101728 0% 50%) 0 0 / 22px 22px; }
   .asset-label { display: block; margin-top: 10px; font-size: 12px; color: var(--ink-3); }
   .small-row { display: flex; gap: 14px; align-items: flex-end; margin-top: 8px; }
   .small-row .s { text-align: center; }
   .small-row .s span { display: block; font-size: 10px; color: var(--ink-3); margin-top: 5px; }
 
-  .launcher { background: #070d20; border-radius: 12px; padding: 30px 20px 22px;
-    display: flex; gap: 34px; justify-content: center; align-items: flex-start; overflow-x: auto; }
-  .tile { text-align: center; opacity: 0.75; }
-  .tile .art { width: 92px; height: 92px; border-radius: 14px; overflow: hidden; }
-  .tile .art svg { display: block; width: 100%; height: 100%; }
-  .tile .name { margin-top: 9px; font-size: 12px; color: var(--ink-2); }
-  .tile.focus { opacity: 1; }
-  .tile.focus .art { outline: 3px solid var(--accent); outline-offset: 3px; }
-  .tile.focus .name { color: var(--ink); font-weight: 600; }
+  /* webOS 4 launcher ribbon: long slanted full-color cards */
+  .ribbon { background: #070d20; border-radius: 12px; padding: 36px 26px 20px;
+    display: flex; gap: 20px; justify-content: center; align-items: flex-start; overflow-x: auto; }
+  .cardwrap { text-align: center; }
+  .wcard { width: 168px; height: 96px; transform: skewX(-14deg); border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.45); }
+  .wcard-in { transform: skewX(14deg); display: flex; align-items: center; justify-content: center; }
+  .cardwrap .name { margin-top: 11px; font-size: 12px; color: var(--ink-2); transform: skewX(0); }
+  .cardwrap.focus .wcard { outline: 3px solid rgba(255,255,255,0.85); outline-offset: 3px; }
+  .cardwrap.focus .name { color: var(--ink); font-weight: 600; }
 
   .splash-mock { width: 100%; border-radius: 10px; display: block; border: 1px solid var(--hairline); }
 
@@ -123,21 +123,20 @@
 <header>
   <div class="kicker">Throwaway prototype · webos-bluepad#14</div>
   <h1>BluePad — icon &amp; splash concepts</h1>
-  <p>Round 4 — <strong>your baseline rune was right all along</strong>: its geometry
-  (spine + right double wedge + left chevron apexing at the spine's middle) is the
-  canonical Bluetooth bind rune, verified against Material, MDI, and Font Awesome
-  renderings. Round 3's "corrected" rune was wrong and is gone; your rune is kept in
-  every variant. <strong>1–3</strong> hold your art as-is (baseline, flat, dark badge);
-  <strong>4–7</strong> play creatively around the rune: <strong>4 · Rune hero</strong>
-  (scaled to span the pad, details dimmed), <strong>5 · Rune tilted 45°</strong>,
-  <strong>6 · Pairing ripples</strong> (cyan rings radiating across the badge),
-  <strong>7 · Neon rune</strong>. Flip with the bar below or ←/→. Each covers the full
-  appinfo set: <code>icon.png</code> 130×130, <code>icon_large.png</code> 320×320,
-  small-size legibility, launcher context, <code>splash.png</code>, and
+  <p>Round 5 — <strong>near-verdict</strong>: the baseline art ships as the
+  <strong>controller only</strong>; the rounded-square badge is dropped. On webOS 4 the
+  launcher ribbon supplies the color — long slanted full-color cards, each the app's
+  <code>iconColor</code> with its icon on top — so <code>iconColor</code> becomes
+  load-bearing. <strong>8 · Controller only</strong> is the shipping candidate (shown on
+  a checkerboard so the transparency is obvious, and in the ribbon as it actually
+  renders). Variants <strong>1–7</strong> from earlier rounds stay for reference, now
+  previewed in the realistic ribbon too. Flip with the bar below or ←/→. Each covers
+  the full appinfo set: <code>icon.png</code> 130×130, <code>icon_large.png</code>
+  320×320, small-size legibility, launcher context, <code>splash.png</code>, and
   <code>iconColor</code>.</p>
 </header>
 
-<!-- shared defs: gradients reused by all variants -->
+<!-- shared defs: gradients and art reused by all variants -->
 <svg width="0" height="0" style="position:absolute">
   <defs>
     <linearGradient id="bgBlue" x1="0" y1="0" x2="0" y2="1">
@@ -193,6 +192,14 @@
 <!-- ============ concept symbols ============ -->
 <svg width="0" height="0" style="position:absolute">
   <defs>
+
+  <!-- 8: controller only — the shipping candidate, no badge, transparent -->
+  <symbol id="icon8" viewBox="43 92 426 426">
+    <circle cx="256" cy="305" r="88" fill="url(#glowCyan)"/>
+    <use href="#padBase"/>
+    <use href="#detailsBase"/>
+    <use href="#runeBase" stroke="#00c8ff" stroke-width="13"/>
+  </symbol>
 
   <!-- 1: baseline, exactly as provided -->
   <symbol id="icon1" viewBox="0 0 512 512">
@@ -279,6 +286,15 @@
     <circle cx="230" cy="110" r="270" fill="#5b8dff" opacity="0.07"/>
     <circle cx="770" cy="470" r="310" fill="#5b8dff" opacity="0.05"/>
   </symbol>
+  <symbol id="splash8" viewBox="0 0 960 540">
+    <use href="#splashBase"/>
+    <use href="#icon8" x="370" y="100" width="220" height="220"/>
+    <text x="480" y="352" text-anchor="middle" fill="#ffffff" font-size="46"
+      font-weight="700" letter-spacing="1"
+      font-family="Geist, Inter, system-ui, sans-serif">BluePad</text>
+    <text x="480" y="390" text-anchor="middle" fill="rgba(255,255,255,0.62)"
+      font-size="17" font-family="Geist, Inter, system-ui, sans-serif">Bluetooth gamepads for webOS</text>
+  </symbol>
   <symbol id="splash1" viewBox="0 0 960 540">
     <use href="#splashBase"/>
     <use href="#icon1" x="390" y="92" width="180" height="180"/>
@@ -342,37 +358,81 @@
     <text x="480" y="368" text-anchor="middle" fill="rgba(255,255,255,0.62)"
       font-size="17" font-family="Geist, Inter, system-ui, sans-serif">Bluetooth gamepads for webOS</text>
   </symbol>
-
-  <!-- muted dummy launcher tiles -->
-  <symbol id="dummyStream" viewBox="0 0 320 320">
-    <rect width="320" height="320" rx="34" fill="#1a2030"/>
-    <path d="M120 90 L230 160 L120 230 Z" fill="rgba(255,255,255,0.55)"/>
-  </symbol>
-  <symbol id="dummyMusic" viewBox="0 0 320 320">
-    <rect width="320" height="320" rx="34" fill="#1a2030"/>
-    <path d="M210 80 v110 a34 34 0 1 1 -22 -32 v-52 l-66 14 v96 a34 34 0 1 1 -22 -32 v-104 z"
-      fill="rgba(255,255,255,0.55)"/>
-  </symbol>
-  <symbol id="dummyPhotos" viewBox="0 0 320 320">
-    <rect width="320" height="320" rx="34" fill="#1a2030"/>
-    <circle cx="115" cy="115" r="26" fill="rgba(255,255,255,0.55)"/>
-    <path d="M70 240 L150 155 L205 215 L245 175 L265 240 Z" fill="rgba(255,255,255,0.55)"/>
-  </symbol>
-  <symbol id="dummySettings" viewBox="0 0 320 320">
-    <rect width="320" height="320" rx="34" fill="#1a2030"/>
-    <path d="M160 105 a55 55 0 1 0 0.01 0 z M160 60 l10 26 a76 76 0 0 1 22 9 l25 -11 19 19 -11 25 a76 76 0 0 1 9 22 l26 10 v27 l-26 10 a76 76 0 0 1 -9 22 l11 25 -19 19 -25 -11 a76 76 0 0 1 -22 9 l-10 26 h-27 l-10 -26 a76 76 0 0 1 -22 -9 l-25 11 -19 -19 11 -25 a76 76 0 0 1 -9 -22 l-26 -10 v-27 l26 -10 a76 76 0 0 1 9 -22 l-11 -25 19 -19 25 11 a76 76 0 0 1 22 -9 l10 -26 z"
-      fill="rgba(255,255,255,0.55)"/>
-  </symbol>
   </defs>
 </svg>
+
+<!-- ============ variant 8 — the shipping candidate ============ -->
+<section class="variant" id="v8">
+  <h2>8 · Controller only — no badge</h2>
+  <p class="gist">The near-verdict: the baseline art with the rounded-square badge
+  dropped — just the controller, on transparency. The webOS 4 launcher card supplies
+  the color via <code>iconColor</code>, so the blue moves from the icon to the card and
+  the tile reads as one full-color face. Shown on a checkerboard to make the
+  transparency obvious, and in the ribbon below as it actually renders on the
+  device.</p>
+
+  <div class="panel">
+    <h3>icon_large.png · 320×320 &nbsp;+&nbsp; icon.png · 130×130 &nbsp;+&nbsp; legibility (checker = transparent)</h3>
+    <div class="hero-row">
+      <div class="icon-slot"><div class="frame checker"><svg width="220" height="220"><use href="#icon8"/></svg></div>
+        <span class="asset-label">320×320 · icon_large</span></div>
+      <div class="icon-slot"><div class="frame checker"><svg width="130" height="130"><use href="#icon8"/></svg></div>
+        <span class="asset-label">130×130 · icon</span>
+        <div class="small-row">
+          <div class="s"><svg width="96" height="96"><use href="#icon8"/></svg><span>96</span></div>
+          <div class="s"><svg width="64" height="64"><use href="#icon8"/></svg><span>64</span></div>
+          <div class="s"><svg width="48" height="48"><use href="#icon8"/></svg><span>48</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Launcher context — webOS 4 ribbon, slanted full-color cards</h3>
+    <div class="ribbon">
+      <div class="cardwrap"><div class="wcard" style="background:#c0392b"><div class="wcard-in">
+        <svg width="44" height="44" viewBox="0 0 320 320"><path d="M120 90 L230 160 L120 230 Z" fill="#fff"/></svg>
+      </div></div><div class="name">Stream</div></div>
+      <div class="cardwrap"><div class="wcard" style="background:#8e44ad"><div class="wcard-in">
+        <svg width="44" height="44" viewBox="0 0 320 320"><path d="M210 80 v110 a34 34 0 1 1 -22 -32 v-52 l-66 14 v96 a34 34 0 1 1 -22 -32 v-104 z" fill="#fff"/></svg>
+      </div></div><div class="name">Music</div></div>
+      <div class="cardwrap focus"><div class="wcard" style="background:linear-gradient(135deg,#2f7bff,#0a2f8f)"><div class="wcard-in">
+        <svg width="78" height="78"><use href="#icon8"/></svg>
+      </div></div><div class="name">BluePad</div></div>
+      <div class="cardwrap"><div class="wcard" style="background:#16a085"><div class="wcard-in">
+        <svg width="44" height="44" viewBox="0 0 320 320"><circle cx="115" cy="115" r="26" fill="#fff"/><path d="M70 240 L150 155 L205 215 L245 175 L265 240 Z" fill="#fff"/></svg>
+      </div></div><div class="name">Photos</div></div>
+      <div class="cardwrap"><div class="wcard" style="background:#57606f"><div class="wcard-in">
+        <svg width="44" height="44" viewBox="0 0 320 320"><path d="M160 105 a55 55 0 1 0 0.01 0 z M160 60 l10 26 a76 76 0 0 1 22 9 l25 -11 19 19 -11 25 a76 76 0 0 1 9 22 l26 10 v27 l-26 10 a76 76 0 0 1 -9 22 l11 25 -19 19 -25 -11 a76 76 0 0 1 -22 9 l-10 26 h-27 l-10 -26 a76 76 0 0 1 -22 -9 l-25 11 -19 -19 11 -25 a76 76 0 0 1 -9 -22 l-26 -10 v-27 l26 -10 a76 76 0 0 1 9 -22 l-11 -25 19 -19 25 11 a76 76 0 0 1 22 -9 l10 -26 z" fill="#fff"/></svg>
+      </div></div><div class="name">Settings</div></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>splash.png · cold start</h3>
+    <svg class="splash-mock"><use href="#splash8"/></svg>
+  </div>
+
+  <div class="panel">
+    <h3>iconColor</h3>
+    <div class="appinfo">
+      <div class="swatch" style="background:linear-gradient(135deg,#2f7bff,#0a2f8f)"></div>
+      <div class="meta"><b>#1557d8 — now load-bearing</b>
+        <p>With no badge, this is the launcher card's face: the webOS 4 ribbon paints the
+        slanted card in <code>iconColor</code> and composites the transparent controller
+        on top. The blue moved from the icon into the card; ambient UI stays on the same
+        blue.</p></div>
+    </div>
+  </div>
+</section>
 
 <!-- ============ variant 1 ============ -->
 <section class="variant" id="v1">
   <h2>1 · Baseline — as provided</h2>
   <p class="gist">Your art, exactly as handed over — and its rune is the canonical
   Bluetooth bind rune. Rounded blue-gradient badge, light pad with circular grips,
-  blue d-pad, SNES-style four-color diamond, cyan rune over a soft glow. The reference
-  every other variant is measured against.</p>
+  blue d-pad, SNES-style four-color diamond, cyan rune over a soft glow. Kept for
+  reference against the controller-only candidate.</p>
 
   <div class="panel">
     <h3>icon_large.png · 320×320 &nbsp;+&nbsp; icon.png · 130×130 &nbsp;+&nbsp; legibility</h3>
@@ -391,13 +451,23 @@
   </div>
 
   <div class="panel">
-    <h3>Launcher context — webOS 4 ribbon</h3>
-    <div class="launcher">
-      <div class="tile"><div class="art"><svg><use href="#dummyStream"/></svg></div><div class="name">Stream</div></div>
-      <div class="tile"><div class="art"><svg><use href="#dummyMusic"/></svg></div><div class="name">Music</div></div>
-      <div class="tile focus"><div class="art"><svg><use href="#icon1"/></svg></div><div class="name">BluePad</div></div>
-      <div class="tile"><div class="art"><svg><use href="#dummyPhotos"/></svg></div><div class="name">Photos</div></div>
-      <div class="tile"><div class="art"><svg><use href="#dummySettings"/></svg></div><div class="name">Settings</div></div>
+    <h3>Launcher context — webOS 4 ribbon, slanted full-color cards</h3>
+    <div class="ribbon">
+      <div class="cardwrap"><div class="wcard" style="background:#c0392b"><div class="wcard-in">
+        <svg width="44" height="44" viewBox="0 0 320 320"><path d="M120 90 L230 160 L120 230 Z" fill="#fff"/></svg>
+      </div></div><div class="name">Stream</div></div>
+      <div class="cardwrap"><div class="wcard" style="background:#8e44ad"><div class="wcard-in">
+        <svg width="44" height="44" viewBox="0 0 320 320"><path d="M210 80 v110 a34 34 0 1 1 -22 -32 v-52 l-66 14 v96 a34 34 0 1 1 -22 -32 v-104 z" fill="#fff"/></svg>
+      </div></div><div class="name">Music</div></div>
+      <div class="cardwrap focus"><div class="wcard" style="background:linear-gradient(135deg,#2f7bff,#0a2f8f)"><div class="wcard-in">
+        <svg width="64" height="64"><use href="#icon1"/></svg>
+      </div></div><div class="name">BluePad</div></div>
+      <div class="cardwrap"><div class="wcard" style="background:#16a085"><div class="wcard-in">
+        <svg width="44" height="44" viewBox="0 0 320 320"><circle cx="115" cy="115" r="26" fill="#fff"/><path d="M70 240 L150 155 L205 215 L245 175 L265 240 Z" fill="#fff"/></svg>
+      </div></div><div class="name">Photos</div></div>
+      <div class="cardwrap"><div class="wcard" style="background:#57606f"><div class="wcard-in">
+        <svg width="44" height="44" viewBox="0 0 320 320"><path d="M160 105 a55 55 0 1 0 0.01 0 z M160 60 l10 26 a76 76 0 0 1 22 9 l25 -11 19 19 -11 25 a76 76 0 0 1 9 22 l26 10 v27 l-26 10 a76 76 0 0 1 -9 22 l11 25 -19 19 -25 -11 a76 76 0 0 1 -22 9 l-10 26 h-27 l-10 -26 a76 76 0 0 1 -22 -9 l-25 11 -19 -19 11 -25 a76 76 0 0 1 -9 -22 l-26 -10 v-27 l26 -10 a76 76 0 0 1 9 -22 l-11 -25 19 -19 25 11 a76 76 0 0 1 22 -9 l10 -26 z" fill="#fff"/></svg>
+      </div></div><div class="name">Settings</div></div>
     </div>
   </div>
 
@@ -441,13 +511,23 @@
   </div>
 
   <div class="panel">
-    <h3>Launcher context — webOS 4 ribbon</h3>
-    <div class="launcher">
-      <div class="tile"><div class="art"><svg><use href="#dummyStream"/></svg></div><div class="name">Stream</div></div>
-      <div class="tile"><div class="art"><svg><use href="#dummyMusic"/></svg></div><div class="name">Music</div></div>
-      <div class="tile focus"><div class="art"><svg><use href="#icon2"/></svg></div><div class="name">BluePad</div></div>
-      <div class="tile"><div class="art"><svg><use href="#dummyPhotos"/></svg></div><div class="name">Photos</div></div>
-      <div class="tile"><div class="art"><svg><use href="#dummySettings"/></svg></div><div class="name">Settings</div></div>
+    <h3>Launcher context — webOS 4 ribbon, slanted full-color cards</h3>
+    <div class="ribbon">
+      <div class="cardwrap"><div class="wcard" style="background:#c0392b"><div class="wcard-in">
+        <svg width="44" height="44" viewBox="0 0 320 320"><path d="M120 90 L230 160 L120 230 Z" fill="#fff"/></svg>
+      </div></div><div class="name">Stream</div></div>
+      <div class="cardwrap"><div class="wcard" style="background:#8e44ad"><div class="wcard-in">
+        <svg width="44" height="44" viewBox="0 0 320 320"><path d="M210 80 v110 a34 34 0 1 1 -22 -32 v-52 l-66 14 v96 a34 34 0 1 1 -22 -32 v-104 z" fill="#fff"/></svg>
+      </div></div><div class="name">Music</div></div>
+      <div class="cardwrap focus"><div class="wcard" style="background:#1557d8"><div class="wcard-in">
+        <svg width="64" height="64"><use href="#icon2"/></svg>
+      </div></div><div class="name">BluePad</div></div>
+      <div class="cardwrap"><div class="wcard" style="background:#16a085"><div class="wcard-in">
+        <svg width="44" height="44" viewBox="0 0 320 320"><circle cx="115" cy="115" r="26" fill="#fff"/><path d="M70 240 L150 155 L205 215 L245 175 L265 240 Z" fill="#fff"/></svg>
+      </div></div><div class="name">Photos</div></div>
+      <div class="cardwrap"><div class="wcard" style="background:#57606f"><div class="wcard-in">
+        <svg width="44" height="44" viewBox="0 0 320 320"><path d="M160 105 a55 55 0 1 0 0.01 0 z M160 60 l10 26 a76 76 0 0 1 22 9 l25 -11 19 19 -11 25 a76 76 0 0 1 9 22 l26 10 v27 l-26 10 a76 76 0 0 1 -9 22 l11 25 -19 19 -25 -11 a76 76 0 0 1 -22 9 l-10 26 h-27 l-10 -26 a76 76 0 0 1 -22 -9 l-25 11 -19 -19 11 -25 a76 76 0 0 1 -9 -22 l-26 -10 v-27 l26 -10 a76 76 0 0 1 9 -22 l-11 -25 19 -19 25 11 a76 76 0 0 1 22 -9 l10 -26 z" fill="#fff"/></svg>
+      </div></div><div class="name">Settings</div></div>
     </div>
   </div>
 
@@ -491,13 +571,23 @@
   </div>
 
   <div class="panel">
-    <h3>Launcher context — webOS 4 ribbon</h3>
-    <div class="launcher">
-      <div class="tile"><div class="art"><svg><use href="#dummyStream"/></svg></div><div class="name">Stream</div></div>
-      <div class="tile"><div class="art"><svg><use href="#dummyMusic"/></svg></div><div class="name">Music</div></div>
-      <div class="tile focus"><div class="art"><svg><use href="#icon3"/></svg></div><div class="name">BluePad</div></div>
-      <div class="tile"><div class="art"><svg><use href="#dummyPhotos"/></svg></div><div class="name">Photos</div></div>
-      <div class="tile"><div class="art"><svg><use href="#dummySettings"/></svg></div><div class="name">Settings</div></div>
+    <h3>Launcher context — webOS 4 ribbon, slanted full-color cards</h3>
+    <div class="ribbon">
+      <div class="cardwrap"><div class="wcard" style="background:#c0392b"><div class="wcard-in">
+        <svg width="44" height="44" viewBox="0 0 320 320"><path d="M120 90 L230 160 L120 230 Z" fill="#fff"/></svg>
+      </div></div><div class="name">Stream</div></div>
+      <div class="cardwrap"><div class="wcard" style="background:#8e44ad"><div class="wcard-in">
+        <svg width="44" height="44" viewBox="0 0 320 320"><path d="M210 80 v110 a34 34 0 1 1 -22 -32 v-52 l-66 14 v96 a34 34 0 1 1 -22 -32 v-104 z" fill="#fff"/></svg>
+      </div></div><div class="name">Music</div></div>
+      <div class="cardwrap focus"><div class="wcard" style="background:#0b1738"><div class="wcard-in">
+        <svg width="64" height="64"><use href="#icon3"/></svg>
+      </div></div><div class="name">BluePad</div></div>
+      <div class="cardwrap"><div class="wcard" style="background:#16a085"><div class="wcard-in">
+        <svg width="44" height="44" viewBox="0 0 320 320"><circle cx="115" cy="115" r="26" fill="#fff"/><path d="M70 240 L150 155 L205 215 L245 175 L265 240 Z" fill="#fff"/></svg>
+      </div></div><div class="name">Photos</div></div>
+      <div class="cardwrap"><div class="wcard" style="background:#57606f"><div class="wcard-in">
+        <svg width="44" height="44" viewBox="0 0 320 320"><path d="M160 105 a55 55 0 1 0 0.01 0 z M160 60 l10 26 a76 76 0 0 1 22 9 l25 -11 19 19 -11 25 a76 76 0 0 1 9 22 l26 10 v27 l-26 10 a76 76 0 0 1 -9 22 l11 25 -19 19 -25 -11 a76 76 0 0 1 -22 9 l-10 26 h-27 l-10 -26 a76 76 0 0 1 -22 -9 l-25 11 -19 -19 11 -25 a76 76 0 0 1 -9 -22 l-26 -10 v-27 l26 -10 a76 76 0 0 1 9 -22 l-11 -25 19 -19 25 11 a76 76 0 0 1 22 -9 l10 -26 z" fill="#fff"/></svg>
+      </div></div><div class="name">Settings</div></div>
     </div>
   </div>
 
@@ -541,13 +631,23 @@
   </div>
 
   <div class="panel">
-    <h3>Launcher context — webOS 4 ribbon</h3>
-    <div class="launcher">
-      <div class="tile"><div class="art"><svg><use href="#dummyStream"/></svg></div><div class="name">Stream</div></div>
-      <div class="tile"><div class="art"><svg><use href="#dummyMusic"/></svg></div><div class="name">Music</div></div>
-      <div class="tile focus"><div class="art"><svg><use href="#icon4"/></svg></div><div class="name">BluePad</div></div>
-      <div class="tile"><div class="art"><svg><use href="#dummyPhotos"/></svg></div><div class="name">Photos</div></div>
-      <div class="tile"><div class="art"><svg><use href="#dummySettings"/></svg></div><div class="name">Settings</div></div>
+    <h3>Launcher context — webOS 4 ribbon, slanted full-color cards</h3>
+    <div class="ribbon">
+      <div class="cardwrap"><div class="wcard" style="background:#c0392b"><div class="wcard-in">
+        <svg width="44" height="44" viewBox="0 0 320 320"><path d="M120 90 L230 160 L120 230 Z" fill="#fff"/></svg>
+      </div></div><div class="name">Stream</div></div>
+      <div class="cardwrap"><div class="wcard" style="background:#8e44ad"><div class="wcard-in">
+        <svg width="44" height="44" viewBox="0 0 320 320"><path d="M210 80 v110 a34 34 0 1 1 -22 -32 v-52 l-66 14 v96 a34 34 0 1 1 -22 -32 v-104 z" fill="#fff"/></svg>
+      </div></div><div class="name">Music</div></div>
+      <div class="cardwrap focus"><div class="wcard" style="background:#1557d8"><div class="wcard-in">
+        <svg width="64" height="64"><use href="#icon4"/></svg>
+      </div></div><div class="name">BluePad</div></div>
+      <div class="cardwrap"><div class="wcard" style="background:#16a085"><div class="wcard-in">
+        <svg width="44" height="44" viewBox="0 0 320 320"><circle cx="115" cy="115" r="26" fill="#fff"/><path d="M70 240 L150 155 L205 215 L245 175 L265 240 Z" fill="#fff"/></svg>
+      </div></div><div class="name">Photos</div></div>
+      <div class="cardwrap"><div class="wcard" style="background:#57606f"><div class="wcard-in">
+        <svg width="44" height="44" viewBox="0 0 320 320"><path d="M160 105 a55 55 0 1 0 0.01 0 z M160 60 l10 26 a76 76 0 0 1 22 9 l25 -11 19 19 -11 25 a76 76 0 0 1 9 22 l26 10 v27 l-26 10 a76 76 0 0 1 -9 22 l11 25 -19 19 -25 -11 a76 76 0 0 1 -22 9 l-10 26 h-27 l-10 -26 a76 76 0 0 1 -22 -9 l-25 11 -19 -19 11 -25 a76 76 0 0 1 -9 -22 l-26 -10 v-27 l26 -10 a76 76 0 0 1 9 -22 l-11 -25 19 -19 25 11 a76 76 0 0 1 22 -9 l10 -26 z" fill="#fff"/></svg>
+      </div></div><div class="name">Settings</div></div>
     </div>
   </div>
 
@@ -591,13 +691,23 @@
   </div>
 
   <div class="panel">
-    <h3>Launcher context — webOS 4 ribbon</h3>
-    <div class="launcher">
-      <div class="tile"><div class="art"><svg><use href="#dummyStream"/></svg></div><div class="name">Stream</div></div>
-      <div class="tile"><div class="art"><svg><use href="#dummyMusic"/></svg></div><div class="name">Music</div></div>
-      <div class="tile focus"><div class="art"><svg><use href="#icon5"/></svg></div><div class="name">BluePad</div></div>
-      <div class="tile"><div class="art"><svg><use href="#dummyPhotos"/></svg></div><div class="name">Photos</div></div>
-      <div class="tile"><div class="art"><svg><use href="#dummySettings"/></svg></div><div class="name">Settings</div></div>
+    <h3>Launcher context — webOS 4 ribbon, slanted full-color cards</h3>
+    <div class="ribbon">
+      <div class="cardwrap"><div class="wcard" style="background:#c0392b"><div class="wcard-in">
+        <svg width="44" height="44" viewBox="0 0 320 320"><path d="M120 90 L230 160 L120 230 Z" fill="#fff"/></svg>
+      </div></div><div class="name">Stream</div></div>
+      <div class="cardwrap"><div class="wcard" style="background:#8e44ad"><div class="wcard-in">
+        <svg width="44" height="44" viewBox="0 0 320 320"><path d="M210 80 v110 a34 34 0 1 1 -22 -32 v-52 l-66 14 v96 a34 34 0 1 1 -22 -32 v-104 z" fill="#fff"/></svg>
+      </div></div><div class="name">Music</div></div>
+      <div class="cardwrap focus"><div class="wcard" style="background:#1557d8"><div class="wcard-in">
+        <svg width="64" height="64"><use href="#icon5"/></svg>
+      </div></div><div class="name">BluePad</div></div>
+      <div class="cardwrap"><div class="wcard" style="background:#16a085"><div class="wcard-in">
+        <svg width="44" height="44" viewBox="0 0 320 320"><circle cx="115" cy="115" r="26" fill="#fff"/><path d="M70 240 L150 155 L205 215 L245 175 L265 240 Z" fill="#fff"/></svg>
+      </div></div><div class="name">Photos</div></div>
+      <div class="cardwrap"><div class="wcard" style="background:#57606f"><div class="wcard-in">
+        <svg width="44" height="44" viewBox="0 0 320 320"><path d="M160 105 a55 55 0 1 0 0.01 0 z M160 60 l10 26 a76 76 0 0 1 22 9 l25 -11 19 19 -11 25 a76 76 0 0 1 9 22 l26 10 v27 l-26 10 a76 76 0 0 1 -9 22 l11 25 -19 19 -25 -11 a76 76 0 0 1 -22 9 l-10 26 h-27 l-10 -26 a76 76 0 0 1 -22 -9 l-25 11 -19 -19 11 -25 a76 76 0 0 1 -9 -22 l-26 -10 v-27 l26 -10 a76 76 0 0 1 9 -22 l-11 -25 19 -19 25 11 a76 76 0 0 1 22 -9 l10 -26 z" fill="#fff"/></svg>
+      </div></div><div class="name">Settings</div></div>
     </div>
   </div>
 
@@ -640,13 +750,23 @@
   </div>
 
   <div class="panel">
-    <h3>Launcher context — webOS 4 ribbon</h3>
-    <div class="launcher">
-      <div class="tile"><div class="art"><svg><use href="#dummyStream"/></svg></div><div class="name">Stream</div></div>
-      <div class="tile"><div class="art"><svg><use href="#dummyMusic"/></svg></div><div class="name">Music</div></div>
-      <div class="tile focus"><div class="art"><svg><use href="#icon6"/></svg></div><div class="name">BluePad</div></div>
-      <div class="tile"><div class="art"><svg><use href="#dummyPhotos"/></svg></div><div class="name">Photos</div></div>
-      <div class="tile"><div class="art"><svg><use href="#dummySettings"/></svg></div><div class="name">Settings</div></div>
+    <h3>Launcher context — webOS 4 ribbon, slanted full-color cards</h3>
+    <div class="ribbon">
+      <div class="cardwrap"><div class="wcard" style="background:#c0392b"><div class="wcard-in">
+        <svg width="44" height="44" viewBox="0 0 320 320"><path d="M120 90 L230 160 L120 230 Z" fill="#fff"/></svg>
+      </div></div><div class="name">Stream</div></div>
+      <div class="cardwrap"><div class="wcard" style="background:#8e44ad"><div class="wcard-in">
+        <svg width="44" height="44" viewBox="0 0 320 320"><path d="M210 80 v110 a34 34 0 1 1 -22 -32 v-52 l-66 14 v96 a34 34 0 1 1 -22 -32 v-104 z" fill="#fff"/></svg>
+      </div></div><div class="name">Music</div></div>
+      <div class="cardwrap focus"><div class="wcard" style="background:#1557d8"><div class="wcard-in">
+        <svg width="64" height="64"><use href="#icon6"/></svg>
+      </div></div><div class="name">BluePad</div></div>
+      <div class="cardwrap"><div class="wcard" style="background:#16a085"><div class="wcard-in">
+        <svg width="44" height="44" viewBox="0 0 320 320"><circle cx="115" cy="115" r="26" fill="#fff"/><path d="M70 240 L150 155 L205 215 L245 175 L265 240 Z" fill="#fff"/></svg>
+      </div></div><div class="name">Photos</div></div>
+      <div class="cardwrap"><div class="wcard" style="background:#57606f"><div class="wcard-in">
+        <svg width="44" height="44" viewBox="0 0 320 320"><path d="M160 105 a55 55 0 1 0 0.01 0 z M160 60 l10 26 a76 76 0 0 1 22 9 l25 -11 19 19 -11 25 a76 76 0 0 1 9 22 l26 10 v27 l-26 10 a76 76 0 0 1 -9 22 l11 25 -19 19 -25 -11 a76 76 0 0 1 -22 9 l-10 26 h-27 l-10 -26 a76 76 0 0 1 -22 -9 l-25 11 -19 -19 11 -25 a76 76 0 0 1 -9 -22 l-26 -10 v-27 l26 -10 a76 76 0 0 1 9 -22 l-11 -25 19 -19 25 11 a76 76 0 0 1 22 -9 l10 -26 z" fill="#fff"/></svg>
+      </div></div><div class="name">Settings</div></div>
     </div>
   </div>
 
@@ -689,13 +809,23 @@
   </div>
 
   <div class="panel">
-    <h3>Launcher context — webOS 4 ribbon</h3>
-    <div class="launcher">
-      <div class="tile"><div class="art"><svg><use href="#dummyStream"/></svg></div><div class="name">Stream</div></div>
-      <div class="tile"><div class="art"><svg><use href="#dummyMusic"/></svg></div><div class="name">Music</div></div>
-      <div class="tile focus"><div class="art"><svg><use href="#icon7"/></svg></div><div class="name">BluePad</div></div>
-      <div class="tile"><div class="art"><svg><use href="#dummyPhotos"/></svg></div><div class="name">Photos</div></div>
-      <div class="tile"><div class="art"><svg><use href="#dummySettings"/></svg></div><div class="name">Settings</div></div>
+    <h3>Launcher context — webOS 4 ribbon, slanted full-color cards</h3>
+    <div class="ribbon">
+      <div class="cardwrap"><div class="wcard" style="background:#c0392b"><div class="wcard-in">
+        <svg width="44" height="44" viewBox="0 0 320 320"><path d="M120 90 L230 160 L120 230 Z" fill="#fff"/></svg>
+      </div></div><div class="name">Stream</div></div>
+      <div class="cardwrap"><div class="wcard" style="background:#8e44ad"><div class="wcard-in">
+        <svg width="44" height="44" viewBox="0 0 320 320"><path d="M210 80 v110 a34 34 0 1 1 -22 -32 v-52 l-66 14 v96 a34 34 0 1 1 -22 -32 v-104 z" fill="#fff"/></svg>
+      </div></div><div class="name">Music</div></div>
+      <div class="cardwrap focus"><div class="wcard" style="background:#1557d8"><div class="wcard-in">
+        <svg width="64" height="64"><use href="#icon7"/></svg>
+      </div></div><div class="name">BluePad</div></div>
+      <div class="cardwrap"><div class="wcard" style="background:#16a085"><div class="wcard-in">
+        <svg width="44" height="44" viewBox="0 0 320 320"><circle cx="115" cy="115" r="26" fill="#fff"/><path d="M70 240 L150 155 L205 215 L245 175 L265 240 Z" fill="#fff"/></svg>
+      </div></div><div class="name">Photos</div></div>
+      <div class="cardwrap"><div class="wcard" style="background:#57606f"><div class="wcard-in">
+        <svg width="44" height="44" viewBox="0 0 320 320"><path d="M160 105 a55 55 0 1 0 0.01 0 z M160 60 l10 26 a76 76 0 0 1 22 9 l25 -11 19 19 -11 25 a76 76 0 0 1 9 22 l26 10 v27 l-26 10 a76 76 0 0 1 -9 22 l11 25 -19 19 -25 -11 a76 76 0 0 1 -22 9 l-10 26 h-27 l-10 -26 a76 76 0 0 1 -22 -9 l-25 11 -19 -19 11 -25 a76 76 0 0 1 -9 -22 l-26 -10 v-27 l26 -10 a76 76 0 0 1 9 -22 l-11 -25 19 -19 25 11 a76 76 0 0 1 22 -9 l10 -26 z" fill="#fff"/></svg>
+      </div></div><div class="name">Settings</div></div>
     </div>
   </div>
 
@@ -731,6 +861,7 @@
 
 <script>
   const VARIANTS = [
+    { k: '8', n: 'Controller only — no badge' },
     { k: '1', n: 'Baseline — as provided' },
     { k: '2', n: 'Flat — no glow' },
     { k: '3', n: 'Dark badge' },
@@ -743,7 +874,7 @@
 
   function currentKey() {
     const h = decodeURIComponent(location.hash.replace('#', ''));
-    return VARIANTS.some(v => v.k === h) ? h : '1';
+    return VARIANTS.some(v => v.k === h) ? h : '8';
   }
   function show(k) {
     VARIANTS.forEach(v => {
