@@ -20,6 +20,14 @@
     A "Solid glyph"      pad as a relief silhouette, rune overlaid in accent
     B "Full-bleed mass"  the pad IS the icon: oversized accent mass, rune knocked in
     C "Line mark"        pad as a hairline outline, rune contained inside
+
+  Round 2 — all three rejected; the user's own sketch takes over: the B of
+  BluePad as the controller outline, d-pad cross in one bowl, four
+  face-button dots in the other, Bluetooth rune tilted 45° in the middle
+  section. Two takes:
+    D "B-mono · solid"   filled accent B, details knocked out, white rune on the spine
+    E "B-mono · line"    the same B in bold line-art, details in accent
+  A–C stay switchable for reference.
 -->
 <html>
 <head>
@@ -114,13 +122,16 @@
 <header>
   <div class="kicker">Throwaway prototype · webos-bluepad#14</div>
   <h1>BluePad — icon &amp; splash concepts</h1>
-  <p>Three structurally different readings of the locked direction: <em>flat, dark
-  background, blue accent, gamepad silhouette + Bluetooth rune, device-agnostic</em>
-  (a generic dual-grip pad — Xbox pads are in scope, so nothing DualSense-specific).
-  Brand palette from the UI prototype: ground <code>#0b1738</code>, accent
-  <code>#5b8dff</code>. Flip with the bar below or ←/→. Each concept is shown across
-  the full appinfo set: <code>icon.png</code> 130×130, <code>icon_large.png</code>
-  320×320, small-size legibility, launcher context, <code>splash.png</code>, and
+  <p>Round 2 — <strong>your sketch</strong>: the <em>B</em> of BluePad as the controller
+  outline — d-pad cross in one bowl, the four face-button dots in the other, and the
+  Bluetooth rune tilted 45° in the middle section — drafted in two takes:
+  <strong>D · solid</strong> (filled B, details knocked out) and <strong>E · line</strong>
+  (bold line-art). Round 1's A–C didn't land; they stay switchable for reference.
+  Direction unchanged: flat, dark ground, blue accent, device-agnostic; palette from
+  the UI prototype: ground <code>#0b1738</code>, accent <code>#5b8dff</code>. Flip
+  with the bar below or ←/→. Each concept is shown across the full appinfo set:
+  <code>icon.png</code> 130×130, <code>icon_large.png</code> 320×320, small-size
+  legibility, launcher context, <code>splash.png</code>, and
   <code>iconColor</code>.</p>
 </header>
 
@@ -186,6 +197,42 @@
       stroke="#5b8dff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
   </symbol>
 
+  <!-- D: B-monogram solid — the B of BluePad as the controller -->
+  <symbol id="iconD" viewBox="0 0 320 320">
+    <rect width="320" height="320" fill="url(#gradA)"/>
+    <g fill="#5b8dff">
+      <rect x="96" y="42" width="54" height="236" rx="27"/>
+      <path d="M150 42 A74 58 0 0 1 150 158 Z"/>
+      <path d="M150 162 A74 58 0 0 1 150 278 Z"/>
+    </g>
+    <g fill="#0b1738">
+      <rect x="157" y="94" width="48" height="12" rx="6"/>
+      <rect x="175" y="76" width="12" height="48" rx="6"/>
+      <circle cx="181" cy="196" r="8"/><circle cx="181" cy="244" r="8"/>
+      <circle cx="157" cy="220" r="8"/><circle cx="205" cy="220" r="8"/>
+    </g>
+    <use href="#rune" transform="translate(123,160) rotate(45) scale(2) translate(-12,-12)"
+      stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+
+  <!-- E: B-monogram line — the same sketch in bold line-art -->
+  <symbol id="iconE" viewBox="0 0 320 320">
+    <rect width="320" height="320" fill="url(#gradA)"/>
+    <g fill="none" stroke="#5b8dff" stroke-width="34" stroke-linecap="round">
+      <line x1="110" y1="59" x2="110" y2="261"/>
+      <path d="M137 42 A74 58 0 0 1 137 158"/>
+      <path d="M137 162 A74 58 0 0 1 137 278"/>
+    </g>
+    <g fill="#5b8dff">
+      <rect x="144" y="94" width="48" height="12" rx="6"/>
+      <rect x="162" y="76" width="12" height="48" rx="6"/>
+      <circle cx="168" cy="196" r="8"/><circle cx="168" cy="244" r="8"/>
+      <circle cx="144" cy="220" r="8"/><circle cx="192" cy="220" r="8"/>
+    </g>
+    <use href="#rune" transform="translate(110,160) rotate(45) scale(1.6) translate(-12,-12)"
+      stroke="#ffffff" stroke-width="3.1" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+
   <!-- splashes: same 16:9 composition, only the mark varies -->
   <symbol id="splashBase" viewBox="0 0 960 540">
     <rect width="960" height="540" fill="#0b1738"/>
@@ -213,6 +260,25 @@
   <symbol id="splashC" viewBox="0 0 960 540">
     <use href="#splashBase"/>
     <use href="#iconC" x="390" y="92" width="180" height="180"/>
+    <text x="480" y="330" text-anchor="middle" fill="#ffffff" font-size="46"
+      font-weight="700" letter-spacing="1"
+      font-family="Geist, Inter, system-ui, sans-serif">BluePad</text>
+    <text x="480" y="368" text-anchor="middle" fill="rgba(255,255,255,0.62)"
+      font-size="17" font-family="Geist, Inter, system-ui, sans-serif">Bluetooth gamepads for webOS</text>
+  </symbol>
+
+  <symbol id="splashD" viewBox="0 0 960 540">
+    <use href="#splashBase"/>
+    <use href="#iconD" x="390" y="92" width="180" height="180"/>
+    <text x="480" y="330" text-anchor="middle" fill="#ffffff" font-size="46"
+      font-weight="700" letter-spacing="1"
+      font-family="Geist, Inter, system-ui, sans-serif">BluePad</text>
+    <text x="480" y="368" text-anchor="middle" fill="rgba(255,255,255,0.62)"
+      font-size="17" font-family="Geist, Inter, system-ui, sans-serif">Bluetooth gamepads for webOS</text>
+  </symbol>
+  <symbol id="splashE" viewBox="0 0 960 540">
+    <use href="#splashBase"/>
+    <use href="#iconE" x="390" y="92" width="180" height="180"/>
     <text x="480" y="330" text-anchor="middle" fill="#ffffff" font-size="46"
       font-weight="700" letter-spacing="1"
       font-family="Geist, Inter, system-ui, sans-serif">BluePad</text>
@@ -397,6 +463,109 @@
   </div>
 </section>
 
+<!-- ============ variant D ============ -->
+<section class="variant" id="vD">
+  <h2>D · B-mono — solid</h2>
+  <p class="gist">Your sketch, solid take: the <em>B</em> of BluePad <strong>is</strong> the
+  controller — d-pad cross knocked into the top bowl, the four face-button dots into
+  the bottom, and the Bluetooth rune tilted 45° riding the spine at the waist in white.
+  One letter, one mass, zero devices named. ("Bars" read here as the bind rune tilted
+  45° — if you meant Wi-Fi-style signal bars, say the word.)</p>
+
+  <div class="panel">
+    <h3>icon_large.png · 320×320 &nbsp;+&nbsp; icon.png · 130×130 &nbsp;+&nbsp; legibility</h3>
+    <div class="hero-row">
+      <div class="icon-slot"><div class="frame"><svg width="220" height="220"><use href="#iconD"/></svg></div>
+        <span class="asset-label">320×320 · icon_large</span></div>
+      <div class="icon-slot"><div class="frame"><svg width="130" height="130"><use href="#iconD"/></svg></div>
+        <span class="asset-label">130×130 · icon</span>
+        <div class="small-row">
+          <div class="s"><svg width="96" height="96"><use href="#iconD"/></svg><span>96</span></div>
+          <div class="s"><svg width="64" height="64"><use href="#iconD"/></svg><span>64</span></div>
+          <div class="s"><svg width="48" height="48"><use href="#iconD"/></svg><span>48</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Launcher context — webOS 4 ribbon</h3>
+    <div class="launcher">
+      <div class="tile"><div class="art"><svg><use href="#dummyStream"/></svg></div><div class="name">Stream</div></div>
+      <div class="tile"><div class="art"><svg><use href="#dummyMusic"/></svg></div><div class="name">Music</div></div>
+      <div class="tile focus"><div class="art"><svg><use href="#iconD"/></svg></div><div class="name">BluePad</div></div>
+      <div class="tile"><div class="art"><svg><use href="#dummyPhotos"/></svg></div><div class="name">Photos</div></div>
+      <div class="tile"><div class="art"><svg><use href="#dummySettings"/></svg></div><div class="name">Settings</div></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>splash.png · cold start</h3>
+    <svg class="splash-mock"><use href="#splashD"/></svg>
+  </div>
+
+  <div class="panel">
+    <h3>iconColor</h3>
+    <div class="appinfo">
+      <div class="swatch" style="background:#0b1738"></div>
+      <div class="meta"><b>#0b1738 — the brand ground</b>
+        <p>The B is a single accent mass, so ambient UI should stay on the brand ground
+        and let the letter carry the identity.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ variant E ============ -->
+<section class="variant" id="vE">
+  <h2>E · B-mono — line</h2>
+  <p class="gist">The same sketch in bold line-art: the B drawn as thick rounded strokes,
+  cross and dots floating in accent inside the bowls, white rune at the waist. Lighter
+  footprint than D and a touch more "designed"; the honest test is the 48 px tile —
+  the bowls must stay readable.</p>
+
+  <div class="panel">
+    <h3>icon_large.png · 320×320 &nbsp;+&nbsp; icon.png · 130×130 &nbsp;+&nbsp; legibility</h3>
+    <div class="hero-row">
+      <div class="icon-slot"><div class="frame"><svg width="220" height="220"><use href="#iconE"/></svg></div>
+        <span class="asset-label">320×320 · icon_large</span></div>
+      <div class="icon-slot"><div class="frame"><svg width="130" height="130"><use href="#iconE"/></svg></div>
+        <span class="asset-label">130×130 · icon</span>
+        <div class="small-row">
+          <div class="s"><svg width="96" height="96"><use href="#iconE"/></svg><span>96</span></div>
+          <div class="s"><svg width="64" height="64"><use href="#iconE"/></svg><span>64</span></div>
+          <div class="s"><svg width="48" height="48"><use href="#iconE"/></svg><span>48</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Launcher context — webOS 4 ribbon</h3>
+    <div class="launcher">
+      <div class="tile"><div class="art"><svg><use href="#dummyStream"/></svg></div><div class="name">Stream</div></div>
+      <div class="tile"><div class="art"><svg><use href="#dummyMusic"/></svg></div><div class="name">Music</div></div>
+      <div class="tile focus"><div class="art"><svg><use href="#iconE"/></svg></div><div class="name">BluePad</div></div>
+      <div class="tile"><div class="art"><svg><use href="#dummyPhotos"/></svg></div><div class="name">Photos</div></div>
+      <div class="tile"><div class="art"><svg><use href="#dummySettings"/></svg></div><div class="name">Settings</div></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>splash.png · cold start</h3>
+    <svg class="splash-mock"><use href="#splashE"/></svg>
+  </div>
+
+  <div class="panel">
+    <h3>iconColor</h3>
+    <div class="appinfo">
+      <div class="swatch" style="background:#0b1738"></div>
+      <div class="meta"><b>#0b1738 — the brand ground</b>
+        <p>Same ground as D: ambient UI must match the field behind the line mark or the
+        B dissolves during launch.</p></div>
+    </div>
+  </div>
+</section>
+
 <footer>
   THROWAWAY — lives on branch <em>prototype/bluepad-icon</em>, never merged. The winning
   concept gets redrawn as real PNG assets for the appinfo set; the verdict and the branch
@@ -417,12 +586,14 @@
     { k: 'A', n: 'Solid glyph' },
     { k: 'B', n: 'Full-bleed mass' },
     { k: 'C', n: 'Line mark' },
+    { k: 'D', n: 'B-mono · solid' },
+    { k: 'E', n: 'B-mono · line' },
   ];
   const label = document.getElementById('label');
 
   function currentKey() {
     const h = decodeURIComponent(location.hash.replace('#', '')).toUpperCase();
-    return VARIANTS.some(v => v.k === h) ? h : 'A';
+    return VARIANTS.some(v => v.k === h) ? h : 'D'; // round 2: land on the user's sketch
   }
   function show(k) {
     VARIANTS.forEach(v => {
