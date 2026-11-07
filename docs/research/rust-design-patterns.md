@@ -357,3 +357,60 @@ the pattern vocabulary names the seams it is deciding:
 None of this adds crates, layers, or indirection beyond what the four-seam layout
 already fixes — the pattern work is *naming and shaping* the seams the architecture
 ticket has to settle, which should make that grilling session shorter, not bigger.
+
+---
+
+## 6. Maintainer rulings on the considered patterns (2026-11)
+
+The five considered patterns were put to the maintainer with pros and cons; the
+rulings below were checked against the adopted patterns and prior map decisions
+before recording (consistency findings included).
+
+| Pattern | Ruling | Form committed |
+|---|---|---|
+| Abstract Factory | **full** | factory trait for per-pad-kind kits |
+| Builder | **full** | Builder trait + Director, scoped to HID descriptor/report-shaped data |
+| Memento | **lightweight** | serde settings only; crash recovery stays reconcile |
+| Proxy | **lightweight** | protocol-as-proxy + capability introspection request in 0.1.0 |
+| Template Method | **trait form** | pairing-flow skeleton via default methods + per-kind hooks |
+
+**Consistency consequences of the rulings:**
+
+- **The Abstract Factory's real family axis is kind × path, not kind alone.** Kit
+  members (parser, output writer) are only fully meaningful on the app-owned
+  session: output reports ride the app-owned L2CAP channel (controller-settings
+  research), and on the stock path LG's stack owns parsing. Stock-path kits are
+  degenerate by design, and "unsupported combination" must be a first-class
+  product — Xbox app-owned L2CAP is unverified (on-device spike deferred off-map),
+  and stock is proven only for pre-2023 DualSense (revision research). The full
+  factory must model this compatibility matrix; the routing table consults it.
+- **Keep Abstract Factory and the adopted Factory Method distinct.** Factory
+  Method creates *sessions per path* at the routing point (runtime, `Box<dyn>`);
+  Abstract Factory creates *per-kind kits* that sessions consume. Two factory
+  layers with different axes — merging them is the failure mode to watch.
+- **The Builder's load-bearing job is the per-kind `uhid` descriptor** (report
+  fields assembled per pad kind), with Director recipes per kind. Two guardrails:
+  if one fixed descriptor turns out to serve all pads, collapse back to a `const`
+  table; and `settings.json` stays serde — the Builder must not touch it
+  (controller-settings decision, reinforced by the Memento ruling). Parser and
+  descriptor should derive from one shared "report layout" model so byte offsets
+  and exposed usages cannot drift apart.
+- **Memento lightweight requires atomic settings writes** (temp file + rename) so
+  a crash mid-write cannot corrupt the one snapshot kept.
+- **Capability introspection is earned by the boot-persistent daemon**: after an
+  HBC update without reboot, the new UI talks to the old daemon until restart —
+  introspection (a `capabilities` request in the serde request enum, reflecting
+  the Facade's method set) is the graceful answer. It is version negotiation, not
+  auth, consistent with the best-effort seam posture.
+- **The Template Method trait covers the app-owned pairing flow**; the stock
+  "flow" is a thin call into LG's stack and must not be forced through the same
+  skeleton. The skeleton enforces verify-before-connected in one place
+  (truthful-state decision).
+
+**Coherence note:** rulings 1+2+5 compose into a per-kind **kit architecture** —
+the factory returns kits; a kit = report parser + output writer + pairing flow
+(Template Method impl) + descriptor (Builder product). This is the
+maximum-creational-machinery configuration the ticket warned about, held safe by:
+three kinds only, kits as plain structs, an explicit kind × path compatibility
+matrix, and settings outside it all. No conflicts with any adopted pattern or
+prior decision; nothing on the map invalidated.
