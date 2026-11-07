@@ -77,6 +77,9 @@
   .small-row { display: flex; gap: 14px; align-items: flex-end; margin-top: 8px; }
   .small-row .s { text-align: center; }
   .small-row .s span { display: block; font-size: 10px; color: var(--ink-3); margin-top: 5px; }
+  .small-row .chip { display: inline-block; padding: 5px; border-radius: 8px;
+    border: 1px solid var(--hairline);
+    background: repeating-conic-gradient(#18203a 0% 25%, #101728 0% 50%) 0 0 / 14px 14px; }
 
   /* webOS 4 launcher ribbon: long slanted full-color cards */
   .ribbon { background: #070d20; border-radius: 12px; padding: 36px 26px 20px;
@@ -379,9 +382,9 @@
       <div class="icon-slot"><div class="frame checker"><svg width="130" height="130"><use href="#icon8"/></svg></div>
         <span class="asset-label">130×130 · icon</span>
         <div class="small-row">
-          <div class="s"><svg width="96" height="96"><use href="#icon8"/></svg><span>96</span></div>
-          <div class="s"><svg width="64" height="64"><use href="#icon8"/></svg><span>64</span></div>
-          <div class="s"><svg width="48" height="48"><use href="#icon8"/></svg><span>48</span></div>
+          <div class="s"><div class="chip"><svg width="96" height="96"><use href="#icon8"/></svg></div><span>96</span></div>
+          <div class="s"><div class="chip"><svg width="64" height="64"><use href="#icon8"/></svg></div><span>64</span></div>
+          <div class="s"><div class="chip"><svg width="48" height="48"><use href="#icon8"/></svg></div><span>48</span></div>
         </div>
       </div>
     </div>
@@ -396,7 +399,7 @@
       <div class="cardwrap"><div class="wcard" style="background:#8e44ad"><div class="wcard-in">
         <svg width="44" height="44" viewBox="0 0 320 320"><path d="M210 80 v110 a34 34 0 1 1 -22 -32 v-52 l-66 14 v96 a34 34 0 1 1 -22 -32 v-104 z" fill="#fff"/></svg>
       </div></div><div class="name">Music</div></div>
-      <div class="cardwrap focus"><div class="wcard" style="background:linear-gradient(135deg,#2f7bff,#0a2f8f)"><div class="wcard-in">
+      <div class="cardwrap focus"><div class="wcard" style="background:#1557d8"><div class="wcard-in">
         <svg width="78" height="78"><use href="#icon8"/></svg>
       </div></div><div class="name">BluePad</div></div>
       <div class="cardwrap"><div class="wcard" style="background:#16a085"><div class="wcard-in">
@@ -416,12 +419,12 @@
   <div class="panel">
     <h3>iconColor</h3>
     <div class="appinfo">
-      <div class="swatch" style="background:linear-gradient(135deg,#2f7bff,#0a2f8f)"></div>
+      <div class="swatch" style="background:#1557d8"></div>
       <div class="meta"><b>#1557d8 — now load-bearing</b>
-        <p>With no badge, this is the launcher card's face: the webOS 4 ribbon paints the
-        slanted card in <code>iconColor</code> and composites the transparent controller
-        on top. The blue moved from the icon into the card; ambient UI stays on the same
-        blue.</p></div>
+        <p>With no badge, this single hex is the launcher card's face: the webOS 4 ribbon
+        paints the slanted card flat in <code>iconColor</code> and composites the
+        transparent controller on top. The blue moved from the icon into the card; ambient
+        UI stays on the same blue.</p></div>
     </div>
   </div>
 </section>
@@ -459,7 +462,7 @@
       <div class="cardwrap"><div class="wcard" style="background:#8e44ad"><div class="wcard-in">
         <svg width="44" height="44" viewBox="0 0 320 320"><path d="M210 80 v110 a34 34 0 1 1 -22 -32 v-52 l-66 14 v96 a34 34 0 1 1 -22 -32 v-104 z" fill="#fff"/></svg>
       </div></div><div class="name">Music</div></div>
-      <div class="cardwrap focus"><div class="wcard" style="background:linear-gradient(135deg,#2f7bff,#0a2f8f)"><div class="wcard-in">
+      <div class="cardwrap focus"><div class="wcard" style="background:#1557d8"><div class="wcard-in">
         <svg width="64" height="64"><use href="#icon1"/></svg>
       </div></div><div class="name">BluePad</div></div>
       <div class="cardwrap"><div class="wcard" style="background:#16a085"><div class="wcard-in">
