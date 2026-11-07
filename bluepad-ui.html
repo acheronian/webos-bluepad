@@ -1,0 +1,909 @@
+<!doctype html>
+<!--
+  THROWAWAY UI PROTOTYPE — answers wayfinder ticket
+  "Prototype: Native app UI in punktfunk's design language"
+  (acheronian/webos-bluepad#8). Never ship this file; the validated decision
+  gets folded into the real Rust + Skia app, the rest of this stays on the
+  prototype branch.
+
+  Question: what should BluePad's native app look like — device list, pairing
+  flow, connection status, adapter-selection settings, about — in punktfunk's
+  console-kit design language?
+
+  Plan: three structurally different variants of the whole app on one stage,
+  switchable via the floating bar (click, or press [ and ]): hash #variant=A|B|C.
+    A "Shell tabs"  — punktfunk-faithful: pinned title band, tabs, rows, hint bar.
+    B "Rail + cards" — left rail navigation, hero status card, pad card grid.
+    C "Ring-first"  — one giant pair-ring, pads as ambient chips, chrome hidden.
+
+  Drive it like the TV: arrows = D-pad, Enter = A/OK, Backspace/Esc = Back.
+  Design tokens lifted from pf-console-ui sources (theme.rs / palette.rs / shell.rs):
+  violet mesh field, glass panels, rim-light hairlines, Geist, 1.5dp glyphs,
+  88dp top band, 86dp hint bar, sprung push/pop.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<title>BluePad UI prototype (THROWAWAY) — webos-bluepad#8</title>
+<style>
+  :root {
+    --ground: #21186e;          /* palette.rs "violet" ground (0.129, 0.094, 0.431) */
+    --accent: #8678f5;          /* palette.rs accent (0.525, 0.471, 0.961) */
+    --ink: #ffffff;
+    --ink-2: rgba(255, 255, 255, 0.62);
+    --ink-3: rgba(255, 255, 255, 0.38);
+    --glass: rgba(255, 255, 255, 0.06);
+    --glass-2: rgba(255, 255, 255, 0.10);
+    --hairline: rgba(255, 255, 255, 0.14);
+    --ok: #33d64a;              /* theme.rs ONLINE_GREEN */
+    --err: #ff938a;             /* theme.rs ERROR */
+    --radius: 18px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: #0b0820; overflow: hidden;
+    font-family: 'Geist', 'Geist UI', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+  svg { display: inline-block; vertical-align: -3px; }
+
+  /* ---- stage: a 1920x1080 TV, scaled to fit the window ---- */
+  #stage-wrap { position: absolute; inset: 0 0 64px 0; display: flex;
+    align-items: center; justify-content: center; }
+  #stage { position: relative; width: 1920px; height: 1080px;
+    background: var(--ground); overflow: hidden;
+    transform-origin: center center; border-radius: 6px; }
+  #mesh { position: absolute; inset: 0; }
+  #mesh canvas { width: 100%; height: 100%; }
+
+  .variant { position: absolute; inset: 0; display: none; color: var(--ink); }
+  .variant.active { display: block; }
+
+  /* ---- glass panel recipe (theme.rs: fill + rim_light + soft_shadow) ---- */
+  .panel {
+    background: var(--glass);
+    border-radius: var(--radius);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+    position: relative;
+  }
+  .panel::before { /* rim light: top-edge hairline, white fading down */
+    content: ''; position: absolute; inset: 0; border-radius: inherit;
+    padding-top: 1px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0) 24px);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  /* ---- focus ---- */
+  .focusable { outline: none; cursor: pointer; transition: transform .18s cubic-bezier(.2,.9,.25,1.2), background .18s, box-shadow .18s; }
+  .focused { background: var(--glass-2);
+    box-shadow: 0 0 0 2px var(--accent), 0 8px 32px rgba(0,0,0,.35), 0 0 48px rgba(134,120,245,.35);
+    transform: scale(1.015); }
+
+  /* ---- screens + push/pop (shell.rs: slide 36dp, scale .985/.96, spring) ---- */
+  .screen { position: absolute; inset: 0; transition: transform .28s cubic-bezier(.2,.9,.3,1), opacity .28s ease, visibility .28s; }
+  .screen.hidden- { visibility: hidden; opacity: 0; pointer-events: none; }
+  .screen.behind { transform: scale(.96); opacity: .35; pointer-events: none; }
+  .screen.entering { transform: translateX(36px) scale(.985); opacity: 0; }
+
+  /* ---- chips / badges ---- */
+  .chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px;
+    font-size: 20px; font-weight: 500; letter-spacing: .02em; }
+  .chip .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .chip.ok { color: var(--ok); background: rgba(51,214,74,.10); } .chip.ok .dot { background: var(--ok); }
+  .chip.off { color: var(--ink-3); background: rgba(255,255,255,.05); } .chip.off .dot { background: var(--ink-3); }
+  .chip.busy { color: var(--accent); background: rgba(134,120,245,.12); } .chip.busy .dot { background: var(--accent); animation: pulse 1.2s infinite; }
+  .chip.err { color: var(--err); background: rgba(255,147,138,.10); } .chip.err .dot { background: var(--err); }
+  .route-badge { font-size: 18px; color: var(--ink-3); border: 1px solid var(--hairline);
+    padding: 2px 10px; border-radius: 8px; letter-spacing: .03em; }
+  @keyframes pulse { 50% { opacity: .35; } }
+
+  /* ---- keycaps (hint bar) ---- */
+  .keycap { display: inline-flex; min-width: 34px; height: 34px; padding: 0 8px; border-radius: 8px;
+    align-items: center; justify-content: center; font-size: 17px; font-weight: 600;
+    background: rgba(255,255,255,.10); border: 1px solid var(--hairline); color: var(--ink); }
+  .hintbar { position: absolute; left: 0; right: 0; bottom: 0; height: 86px; /* BOTTOM_BAND */
+    display: flex; align-items: center; justify-content: flex-end; gap: 28px; padding: 0 48px;
+    font-size: 20px; color: var(--ink-2); }
+  .hintbar .hint { display: flex; align-items: center; gap: 10px; }
+
+  /* ================= VARIANT A — shell tabs ================= */
+  #vA .topband { position: absolute; top: 0; left: 0; right: 0; height: 88px; /* TOP_BAND */
+    display: flex; align-items: center; padding: 0 48px; gap: 40px; }
+  #vA .app-title { font-size: 30px; font-weight: 700; letter-spacing: .04em; display: flex; align-items: center; gap: 14px; }
+  #vA .app-title svg { color: var(--accent); }
+  #vA .controller-chip { margin-left: auto; display: flex; align-items: center; gap: 10px;
+    color: var(--ink-2); font-size: 20px; padding: 8px 18px; border-radius: 999px; background: var(--glass); }
+  #vA .controller-chip .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); }
+  #vA .tabs { position: absolute; top: 96px; left: 48px; display: flex; gap: 8px; }
+  #vA .tab { padding: 12px 30px; border-radius: 12px; font-size: 22px; font-weight: 500; color: var(--ink-2); }
+  #vA .tab.focused { color: var(--ink); }
+  .content { position: absolute; top: 180px; left: 48px; right: 48px; bottom: 110px; }
+
+  #vA .rows { display: flex; flex-direction: column; gap: 14px; max-width: 1100px; }
+  #vA .row { display: flex; align-items: center; gap: 24px; padding: 22px 30px; }
+  #vA .row .glyph { color: var(--ink-2); flex: none; }
+  #vA .row .name { font-size: 24px; font-weight: 600; }
+  #vA .row .sub { font-size: 18px; color: var(--ink-3); margin-top: 4px; }
+  #vA .row .right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+  #vA .row.add { border: 1px dashed var(--hairline); background: transparent; box-shadow: none; }
+  #vA .row.add .glyph { color: var(--accent); }
+  #vA .section-label { font-size: 18px; font-weight: 600; letter-spacing: .12em; color: var(--ink-3);
+    text-transform: uppercase; margin: 26px 0 6px 6px; }
+
+  /* pairing + detail screens (variant A) */
+  .center-col { position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 28px; padding-bottom: 60px; }
+  .ring { width: 340px; height: 340px; border-radius: 50%; position: relative;
+    display: flex; align-items: center; justify-content: center; color: var(--accent); }
+  .ring::before { content: ''; position: absolute; inset: 0; border-radius: 50%;
+    border: 3px solid rgba(134,120,245,.35); }
+  .ring::after { content: ''; position: absolute; inset: -26px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,.10); } /* glow_ring bleed */
+  .ring .ring-fill { position: absolute; inset: 0; border-radius: 50%;
+    background: radial-gradient(circle, rgba(134,120,245,.22), rgba(134,120,245,.04) 62%, transparent 70%); }
+  .ring svg { position: relative; }
+  .ring.scanning::before { border-top-color: var(--accent); animation: spin 1.1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .pair-title { font-size: 34px; font-weight: 700; }
+  .pair-sub { font-size: 22px; color: var(--ink-2); max-width: 640px; text-align: center; line-height: 1.5; }
+  .pair-step { font-size: 20px; color: var(--ink-3); }
+
+  .detail-card { width: 900px; padding: 44px 52px; }
+  .detail-card h2 { font-size: 32px; display: flex; align-items: center; gap: 18px; }
+  .detail-card .kv { display: grid; grid-template-columns: 280px 1fr; gap: 14px 24px; margin-top: 30px; font-size: 21px; }
+  .detail-card .kv .k { color: var(--ink-3); }
+  .detail-actions { display: flex; gap: 14px; margin-top: 36px; }
+  .action-btn { padding: 14px 28px; border-radius: 12px; font-size: 21px; font-weight: 600; background: var(--glass); }
+
+  /* settings rows */
+  .set-row { display: flex; align-items: center; gap: 22px; padding: 20px 30px; }
+  .set-row .glyph { color: var(--ink-2); }
+  .set-row .name { font-size: 23px; font-weight: 600; }
+  .set-row .desc { font-size: 17px; color: var(--ink-3); margin-top: 3px; }
+  .set-row .right { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+  .toggle { width: 62px; height: 34px; border-radius: 999px; background: rgba(255,255,255,.12); position: relative; }
+  .toggle::after { content: ''; position: absolute; top: 4px; left: 4px; width: 26px; height: 26px;
+    border-radius: 50%; background: var(--ink-2); transition: all .18s; }
+  .toggle.on { background: var(--accent); }
+  .toggle.on::after { left: 32px; background: #fff; }
+  .radio-dot { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--ink-3); position: relative; }
+  .radio-dot.on { border-color: var(--accent); }
+  .radio-dot.on::after { content: ''; position: absolute; inset: 6px; border-radius: 50%; background: var(--accent); }
+
+  .about-block { max-width: 860px; display: flex; flex-direction: column; gap: 18px; }
+  .about-hero { display: flex; align-items: center; gap: 28px; padding: 40px 44px; }
+  .about-hero .mark { width: 96px; height: 96px; border-radius: 24px; background: var(--accent);
+    display: flex; align-items: center; justify-content: center; color: #fff; }
+  .about-hero h2 { font-size: 36px; }
+  .about-hero .ver { color: var(--ink-3); font-size: 22px; margin-top: 4px; }
+  .about-lines { padding: 30px 44px; font-size: 21px; line-height: 2.0; color: var(--ink-2); }
+  .about-lines b { color: var(--ink); font-weight: 600; }
+
+  /* ================= VARIANT B — rail + cards ================= */
+  #vB .rail { position: absolute; top: 48px; left: 48px; bottom: 110px; width: 280px;
+    display: flex; flex-direction: column; gap: 10px; padding: 28px 20px; }
+  #vB .rail .logo { display: flex; align-items: center; gap: 14px; font-size: 26px; font-weight: 700;
+    padding: 6px 12px 26px; letter-spacing: .04em; }
+  #vB .rail .logo svg { color: var(--accent); }
+  #vB .rail-item { display: flex; align-items: center; gap: 18px; padding: 18px 22px; border-radius: 14px;
+    font-size: 23px; font-weight: 500; color: var(--ink-2); }
+  #vB .rail-item.focused { color: var(--ink); }
+  #vB .rail-item.active-tab { color: var(--ink); }
+  #vB .rail-item.active-tab::before { content: ''; position: absolute; left: 0; width: 4px; height: 34px;
+    background: var(--accent); border-radius: 0 4px 4px 0; }
+  #vB .main { position: absolute; top: 48px; left: 376px; right: 48px; bottom: 110px; }
+  #vB .hero { padding: 34px 44px; display: flex; align-items: center; gap: 30px; margin-bottom: 26px; }
+  #vB .hero .big { font-size: 30px; font-weight: 700; }
+  #vB .hero .sub { font-size: 20px; color: var(--ink-2); margin-top: 8px; }
+  #vB .hero .glyph { color: var(--accent); }
+  #vB .card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  #vB .pad-card { padding: 30px 34px; display: flex; flex-direction: column; gap: 14px; }
+  #vB .pad-card .top { display: flex; align-items: center; gap: 16px; }
+  #vB .pad-card .name { font-size: 25px; font-weight: 600; }
+  #vB .pad-card .sub { font-size: 18px; color: var(--ink-3); }
+  #vB .pad-card .chiprow { display: flex; gap: 12px; margin-top: 6px; }
+  #vB .pad-card.add { border: 1px dashed var(--hairline); background: transparent; box-shadow: none;
+    display: flex; align-items: center; justify-content: center; min-height: 170px;
+    color: var(--accent); font-size: 24px; font-weight: 600; gap: 16px; }
+  /* variant B pairing = side sheet with a step list, not a ring */
+  #vB .sheet { position: absolute; top: 0; right: 0; bottom: 0; width: 760px; padding: 56px 60px;
+    display: flex; flex-direction: column; gap: 26px; border-radius: 0; }
+  #vB .sheet h2 { font-size: 32px; }
+  #vB .steps { display: flex; flex-direction: column; gap: 18px; }
+  #vB .step { display: flex; gap: 20px; align-items: center; padding: 20px 24px; border-radius: 14px;
+    background: rgba(255,255,255,.04); font-size: 21px; }
+  #vB .step .n { width: 40px; height: 40px; border-radius: 50%; flex: none; display: flex; align-items: center;
+    justify-content: center; background: rgba(255,255,255,.10); font-weight: 700; color: var(--ink-2); }
+  #vB .step.done .n { background: var(--ok); color: #06250b; }
+  #vB .step.now .n { background: var(--accent); color: #fff; animation: pulse 1.2s infinite; }
+  #vB .step.now { background: rgba(134,120,245,.10); }
+  #vB .step.todo { opacity: .45; }
+
+  /* ================= VARIANT C — ring-first ================= */
+  #vC .ring-stage { position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 60px; }
+  #vC .big-ring { width: 430px; height: 430px; }
+  #vC .big-ring svg { width: 120px; height: 120px; }
+  #vC .ring-label { position: absolute; bottom: -66px; left: 50%; transform: translateX(-50%);
+    white-space: nowrap; text-align: center; }
+  #vC .ring-label .t { font-size: 26px; font-weight: 700; }
+  #vC .ring-label .s { font-size: 19px; color: var(--ink-2); margin-top: 4px; }
+  #vC .pad-chips { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; max-width: 1300px; }
+  #vC .pad-chip { display: flex; align-items: center; gap: 14px; padding: 16px 26px; border-radius: 999px;
+    font-size: 22px; font-weight: 500; }
+  #vC .pad-chip .dot { width: 11px; height: 11px; border-radius: 50%; background: var(--ok); }
+  #vC .pad-chip.disconnected .dot { background: var(--ink-3); }
+  #vC .pad-chip .sub { color: var(--ink-3); font-size: 18px; font-weight: 400; }
+  #vC .corner { position: absolute; top: 44px; display: flex; gap: 14px; }
+  #vC .corner.right { right: 48px; }
+  #vC .corner-btn { width: 76px; height: 76px; border-radius: 50%; display: flex; align-items: center;
+    justify-content: center; color: var(--ink-2); }
+  #vC .bottom-sheet { position: absolute; left: 50%; bottom: 90px; transform: translateX(-50%);
+    width: 1100px; padding: 36px 48px; display: flex; align-items: center; gap: 30px; }
+  #vC .bottom-sheet .kv { display: flex; gap: 40px; font-size: 20px; }
+  #vC .bottom-sheet .kv .k { color: var(--ink-3); margin-right: 10px; }
+  #vC .settings-col { position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 16px; }
+  #vC .settings-col .rows { width: 860px; display: flex; flex-direction: column; gap: 14px; }
+  #vC .settings-col h2 { font-size: 30px; margin-bottom: 16px; }
+  #vC .about-mini { text-align: center; font-size: 20px; color: var(--ink-2); line-height: 2.1; }
+  #vC .about-mini h2 { font-size: 34px; color: var(--ink); margin-bottom: 10px; }
+
+  /* ---- floating prototype switcher (not part of the design) ---- */
+  #switcher { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 14px; padding: 10px 18px; border-radius: 999px;
+    background: #101014; color: #eee; font: 600 13px/1 system-ui, sans-serif;
+    box-shadow: 0 6px 30px rgba(0,0,0,.6); border: 1px solid #333; z-index: 100; user-select: none; }
+  #switcher button { all: unset; cursor: pointer; padding: 6px 12px; border-radius: 8px; color: #aaa; }
+  #switcher button:hover { background: #222; color: #fff; }
+  #switcher .cur { background: #2d2d36; color: #fff; border-radius: 8px; padding: 6px 14px; min-width: 150px; text-align: center; }
+  #switcher .pills { display: flex; gap: 6px; }
+  #switcher .pill { padding: 6px 12px; border-radius: 8px; cursor: pointer; color: #888; }
+  #switcher .pill.on { background: #444; color: #fff; }
+  #switcher .state { color: #777; font-weight: 400; margin-left: 8px; }
+  #switcher .kbd { color: #666; }
+</style>
+</head>
+<body>
+
+<div id="stage-wrap"><div id="stage">
+  <div id="mesh"><canvas id="meshCanvas" width="128" height="72"></canvas></div>
+
+  <!-- ============ VARIANT A ============ -->
+  <div class="variant" id="vA">
+    <div class="topband">
+      <div class="app-title"><svg data-icon="gamepad" width="34" height="34"></svg>BluePad</div>
+      <div class="controller-chip"><span class="dot"></span><span id="vA-padcount">2 pads</span></div>
+    </div>
+    <div class="tabs" id="vA-tabs"></div>
+
+    <div class="screen" data-vA-screen="pads"><div class="content"><div class="rows" id="vA-padrows"></div></div></div>
+
+    <div class="screen hidden-" data-vA-screen="settings"><div class="content" style="max-width:1000px">
+      <div class="section-label">Bluetooth adapter</div>
+      <div class="rows" id="vA-adapterrows"></div>
+      <div class="section-label">Behavior</div>
+      <div class="rows" id="vA-behaviorrows"></div>
+    </div></div>
+
+    <div class="screen hidden-" data-vA-screen="about"><div class="content"><div class="about-block">
+      <div class="about-hero panel">
+        <div class="mark"><svg data-icon="gamepad" width="56" height="56"></svg></div>
+        <div><h2>BluePad</h2><div class="ver">0.1.0 · com.acheronian.bluepad</div></div>
+      </div>
+      <div class="panel about-lines">
+        Bluetooth gamepad manager for webOS&nbsp;4.x. Pairs and connects pads over the
+        <b>app-owned HID session</b> (raw L2CAP + uhid) with the stock path as fallback,
+        and delivers input to streaming apps such as <b>punktfunk</b> and <b>Moonlight</b>.<br>
+        Installed via the Homebrew Channel · MIT / Apache-2.0 ·
+        based on the punktfunk client-webos architecture.
+      </div>
+    </div></div></div>
+
+    <div class="screen hidden-" data-vA-screen="pair"><div class="center-col">
+      <div class="ring" id="vA-pair-ring"><div class="ring-fill"></div><svg data-icon="bluetooth" width="96" height="96"></svg></div>
+      <div class="pair-title" id="vA-pair-title">Pairing</div>
+      <div class="pair-sub" id="vA-pair-sub"></div>
+      <div class="pair-step" id="vA-pair-step"></div>
+    </div></div>
+
+    <div class="screen hidden-" data-vA-screen="detail"><div class="center-col" id="vA-detail"></div></div>
+
+    <div class="hintbar" id="vA-hints"></div>
+  </div>
+
+  <!-- ============ VARIANT B ============ -->
+  <div class="variant" id="vB">
+    <div class="rail panel" id="vB-rail"></div>
+    <div class="main">
+      <div class="screen" data-vB-screen="home">
+        <div class="hero panel" id="vB-hero"></div>
+        <div class="card-grid" id="vB-cards"></div>
+      </div>
+      <div class="screen hidden-" data-vB-screen="settings"><div class="content" style="top:0">
+        <div class="section-label">Bluetooth adapter</div>
+        <div class="rows" id="vB-adapterrows"></div>
+        <div class="section-label">Behavior</div>
+        <div class="rows" id="vB-behaviorrows"></div>
+      </div></div>
+      <div class="screen hidden-" data-vB-screen="about"><div class="about-block">
+        <div class="about-hero panel">
+          <div class="mark"><svg data-icon="gamepad" width="56" height="56"></svg></div>
+          <div><h2>BluePad</h2><div class="ver">0.1.0 · com.acheronian.bluepad</div></div>
+        </div>
+        <div class="panel about-lines">
+          Bluetooth gamepad manager for webOS&nbsp;4.x — app-owned HID sessions with the
+          stock path as fallback; input delivered to streaming apps.<br>
+          Homebrew Channel · MIT / Apache-2.0 · punktfunk-style native Rust + Skia.
+        </div>
+      </div></div></div>
+      <div class="screen hidden-" data-vB-screen="pair">
+        <div class="sheet panel">
+          <h2>Add a pad</h2>
+          <div class="steps" id="vB-steps"></div>
+          <div class="pair-sub" id="vB-pair-sub" style="text-align:left"></div>
+        </div>
+      </div>
+      <div class="screen hidden-" data-vB-screen="detail"><div class="center-col" id="vB-detail"></div></div>
+    </div>
+    <div class="hintbar" id="vB-hints"></div>
+  </div>
+
+  <!-- ============ VARIANT C ============ -->
+  <div class="variant" id="vC">
+    <div class="screen" data-vC-screen="ring">
+      <div class="ring-stage">
+        <div class="ring big-ring focusable" id="vC-ring" data-focus-id="vC-ring">
+          <div class="ring-fill"></div><svg data-icon="bluetooth" width="120" height="120"></svg>
+          <div class="ring-label"><div class="t" id="vC-ring-t">Pair a pad</div>
+            <div class="s" id="vC-ring-s">Hold PS + Create on the controller</div></div>
+        </div>
+        <div class="pad-chips" id="vC-chips"></div>
+      </div>
+      <div class="corner right">
+        <div class="corner-btn panel focusable" data-focus-id="vC-gear" data-vC-act="settings"><svg data-icon="settings" width="34" height="34"></svg></div>
+        <div class="corner-btn panel focusable" data-focus-id="vC-info" data-vC-act="about"><svg data-icon="info" width="34" height="34"></svg></div>
+      </div>
+      <div class="bottom-sheet panel hidden-" id="vC-sheet"></div>
+    </div>
+    <div class="screen hidden-" data-vC-screen="settings"><div class="settings-col">
+      <h2>Settings</h2>
+      <div class="rows" id="vC-adapterrows"></div>
+      <div class="rows" id="vC-behaviorrows" style="margin-top:26px"></div>
+    </div></div>
+    <div class="screen hidden-" data-vC-screen="about"><div class="settings-col">
+      <div class="about-mini">
+        <h2>BluePad 0.1.0</h2>
+        com.acheronian.bluepad · Homebrew Channel<br>
+        Bluetooth gamepad manager for webOS 4.x · MIT / Apache-2.0
+      </div>
+    </div></div>
+  </div>
+</div></div>
+
+<div id="switcher">
+  <button id="sw-prev" title="previous variant">←</button>
+  <div class="pills" id="sw-pills"></div>
+  <div class="cur" id="sw-cur"></div>
+  <button id="sw-next" title="next variant">→</button>
+  <span class="state" id="sw-state"></span>
+  <span class="kbd">[ ] switch · ⭠⭢ D-pad · ⏎ A · ⌫ Back</span>
+</div>
+
+<script>
+'use strict';
+/* ================= design tokens from pf-console-ui ================= */
+const MESH_COLORS = [ /* palette.rs MESH_COLORS, verbatim */
+  [.075,.060,.160],[.34,.27,.72],[.30,.26,.74],[.075,.060,.160],
+  [.42,.20,.54],[.49,.39,.95],[.28,.31,.84],[.16,.26,.64],
+  [.45,.23,.60],[.53,.31,.75],[.35,.35,.91],[.19,.28,.70],
+  [.075,.060,.160],[.22,.18,.54],[.24,.20,.58],[.075,.060,.160]];
+
+/* Mesh drawn small and CSS-upscaled — the same "reduce interface resolution"
+   trick punktfunk uses for weak GPUs (issue #271). */
+(function mesh() {
+  const cv = document.getElementById('meshCanvas'), ctx = cv.getContext('2d');
+  const W = cv.width, H = cv.height, img = ctx.createImageData(W, H);
+  const at = (x, y) => MESH_COLORS[Math.min(3, Math.max(0, y)) * 4 + Math.min(3, Math.max(0, x))];
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const u = x / (W - 1) * 3, v = y / (H - 1) * 3;
+    const x0 = Math.floor(u), y0 = Math.floor(v), fx = u - x0, fy = v - y0;
+    const c = [0, 0, 0];
+    for (let ch = 0; ch < 3; ch++) {
+      const top = at(x0, y0)[ch] * (1 - fx) + at(x0 + 1, y0)[ch] * fx;
+      const bot = at(x0, y0 + 1)[ch] * (1 - fx) + at(x0 + 1, y0 + 1)[ch] * fx;
+      c[ch] = top * (1 - fy) + bot * fy;
+    }
+    const i = (y * W + x) * 4;
+    img.data[i] = c[0] * 255; img.data[i+1] = c[1] * 255; img.data[i+2] = c[2] * 255; img.data[i+3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+})();
+
+/* ================= Lucide-ish glyphs, 1.5dp stroke (theme.rs GLYPH_STROKE) ================= */
+const ICONS = {
+  gamepad: 'M6 12h4M8 10v4M15 11h.01M18 13h.01M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.419 2.199 11.24 2 12c-.283 1.091-.663 2.79-.78 3.53a2 2 0 0 0 1.98 2.47h.28a2 2 0 0 0 1.4-.56L6.6 16.7a2 2 0 0 1 1.41-.59h4.98c.53 0 1.04.21 1.41.59l1.72 1.74a2 2 0 0 0 1.4.56h.29a2 2 0 0 0 1.98-2.47c-.117-.74-.497-2.44-.78-3.53-.2-.76-.604-2.581-.885-3.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z',
+  bluetooth: 'M7 7l10 10-5 5V2l5 5L7 17',
+  settings: 'M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z M15 12a3 3 0 1 0-6 0 3 3 0 0 0 6 0z',
+  info: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13h-4v5h4z M14 16h1',
+  plus: 'M5 12h14M12 5v14',
+  chevron: 'M9 18l6-6-6-6',
+  refresh: 'M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8 M3 3v5h5 M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16 M16 16h5v5',
+  usb: 'M10 3v9.5l-5.5 2.5M14 3v9.5l5.5 2.5 M12 3v0.01 M12 17v4 M8 21h8 M12 17a2 2 0 0 0 2-2v-2h-4v2a2 2 0 0 0 2 2z',
+  radio: 'M4.9 19.1C1 15.2 1 8.8 4.9 4.9 M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5 M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5 M19.1 4.9C23 8.8 23 15.2 19.1 19.1 M12 13.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z',
+  trash: 'M3 6h18 M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6 M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2 M10 11v6 M14 11v6',
+};
+function icon(name, size, cls) {
+  const paths = ICONS[name].split(' M').map((p, i) => i === 0 ? p : 'M' + p).join('');
+  return `<svg class="${cls||''}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="${paths}"/></svg>`;
+}
+document.querySelectorAll('svg[data-icon]').forEach(el => {
+  const n = el.getAttribute('data-icon');
+  el.outerHTML = icon(n, el.getAttribute('width') || 24);
+});
+
+/* ================= shared in-memory state ================= */
+const state = {
+  pads: [
+    { id: 1, name: 'DualSense (BluePad)', sub: 'Wireless Controller · rev B', route: 'app-owned', status: 'connected', battery: 60 },
+    { id: 2, name: 'DualSense (BluePad)', sub: 'Wireless Controller · rev A', route: 'stock', status: 'connected', battery: 90 },
+    { id: 3, name: 'Xbox One S (BluePad)', sub: 'Xbox Wireless Controller', route: 'app-owned', status: 'disconnected', battery: null },
+  ],
+  adapter: 'onboard',           // 'onboard' | 'dongle'
+  donglePresent: false,
+  autoRecovery: true,
+  reduceRes: true,
+  pairPhase: 'idle',            // idle | scan | found | session | connected
+  pairTarget: null,
+};
+const ROUTE_LABEL = { 'app-owned': 'BLUEPAD SESSION', 'stock': 'STOCK PATH' };
+const STATUS_CHIP = {
+  connected: ['ok', 'Connected'], connecting: ['busy', 'Connecting…'],
+  disconnected: ['off', 'Disconnected'], error: ['err', 'Connect failed'],
+};
+
+/* ================= variant switcher ================= */
+const VARIANTS = [
+  { key: 'A', name: 'Shell tabs' },
+  { key: 'B', name: 'Rail + cards' },
+  { key: 'C', name: 'Ring-first' },
+];
+let curVariant = (location.hash.match(/variant=([ABC])/) || [])[1]
+  || (new URLSearchParams(location.search).get('variant')) || 'A';
+const stacks = { A: ['pads'], B: ['home'], C: ['ring'] };  // screen stacks per variant
+const focusMem = {};   // remembered focus per (variant, screen)
+
+function setVariant(key, push) {
+  curVariant = key;
+  if (push !== false) history.replaceState(null, '', '#variant=' + key);
+  document.querySelectorAll('.variant').forEach(v => v.classList.remove('active'));
+  document.getElementById('v' + key).classList.add('active');
+  renderSwitcher();
+  renderAll();
+  restoreFocus();
+}
+function renderSwitcher() {
+  document.getElementById('sw-cur').textContent =
+    `${curVariant} (${VARIANTS.find(v => v.key === curVariant).name})`;
+  const pills = document.getElementById('sw-pills');
+  pills.innerHTML = VARIANTS.map(v =>
+    `<span class="pill ${v.key === curVariant ? 'on' : ''}" data-v="${v.key}">${v.key}</span>`).join('');
+  pills.querySelectorAll('.pill').forEach(p =>
+    p.onclick = () => setVariant(p.dataset.v));
+}
+document.getElementById('sw-prev').onclick = () => cycle(-1);
+document.getElementById('sw-next').onclick = () => cycle(1);
+function cycle(d) {
+  const i = VARIANTS.findIndex(v => v.key === curVariant);
+  setVariant(VARIANTS[(i + d + VARIANTS.length) % VARIANTS.length].key);
+}
+
+/* ================= screen stacks (push/pop per variant) ================= */
+function topScreen(v) { return stacks[v][stacks[v].length - 1]; }
+/* 'entering' is added/removed only by push/pop so the slide transition survives
+   the applyScreens calls that re-renders trigger. */
+function applyScreens(v) {
+  document.querySelectorAll(`[data-v${v}-screen]`).forEach(el => {
+    const name = el.getAttribute(`data-v${v}-screen`);
+    const i = stacks[v].indexOf(name);
+    if (i < 0) { el.classList.add('hidden-'); el.classList.remove('behind'); return; }
+    el.classList.remove('hidden-');
+    if (i === stacks[v].length - 1) el.classList.remove('behind');
+    else el.classList.add('behind');
+  });
+  renderHints(v);
+  renderSwitcherState();
+}
+function pushScreen(v, name) {
+  const el = document.querySelector(`[data-v${v}-screen="${name}"]`);
+  stacks[v].push(name);
+  el.classList.remove('behind');
+  el.classList.add('entering');
+  const prev = document.querySelector(`[data-v${v}-screen="${stacks[v][stacks[v].length - 2]}"]`);
+  if (prev) { prev.classList.remove('entering'); prev.classList.add('behind'); }
+  requestAnimationFrame(() => requestAnimationFrame(() => el.classList.remove('entering')));
+  focusFirst(v, name);
+}
+function popScreen(v) {
+  if (stacks[v].length <= 1) return;
+  const leaving = stacks[v].pop();
+  const el = document.querySelector(`[data-v${v}-screen="${leaving}"]`);
+  if (el) el.classList.add('entering'); // slides out while hidden- fades it
+  applyScreens(v);
+  setTimeout(() => { if (el) el.classList.remove('entering'); }, 350);
+  focusFirst(v, topScreen(v));
+}
+
+/* ================= focus engine (geometric D-pad nav) ================= */
+let focusedEl = null;
+function focusables() {
+  const v = document.getElementById('v' + curVariant);
+  if (!v.classList.contains('active')) return [];
+  const out = [];
+  v.querySelectorAll('.focusable').forEach(el => {
+    // only focusables on visible screens
+    const scr = el.closest('.screen');
+    if (scr && (scr.classList.contains('hidden-') || scr.classList.contains('behind'))) return;
+    const r = el.getBoundingClientRect();
+    if (r.width > 0) out.push(el);
+  });
+  return out;
+}
+function setFocus(el) {
+  if (focusedEl) focusedEl.classList.remove('focused');
+  focusedEl = el;
+  if (el) {
+    el.classList.add('focused');
+    const scr = el.closest('.screen');
+    if (scr) {
+      const v = curVariant;
+      focusMem[v + ':' + (scr.getAttribute(`data-v${v}-screen`) || 'root')] =
+        el.getAttribute('data-focus-id') || el.textContent.trim().slice(0, 40);
+    }
+  }
+}
+function moveFocus(dx, dy) {
+  const els = focusables();
+  if (!els.length) return;
+  if (!focusedEl || !els.includes(focusedEl)) { setFocus(els[0]); return; }
+  const fr = focusedEl.getBoundingClientRect();
+  const fc = { x: fr.left + fr.width / 2, y: fr.top + fr.height / 2 };
+  let best = null, bestScore = Infinity;
+  for (const el of els) {
+    if (el === focusedEl) continue;
+    const r = el.getBoundingClientRect();
+    const c = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    const ox = c.x - fc.x, oy = c.y - fc.y;
+    const fwd = dx ? Math.sign(ox) === dx && Math.abs(ox) > 4 : Math.sign(oy) === dy && Math.abs(oy) > 4;
+    if (!fwd) continue;
+    const score = dx ? Math.abs(ox) + Math.abs(oy) * 4 : Math.abs(oy) + Math.abs(ox) * 4;
+    if (score < bestScore) { bestScore = score; best = el; }
+  }
+  if (best) setFocus(best);
+}
+function restoreFocus() {
+  const els = focusables();
+  if (!els.length) { focusedEl = null; return; }
+  const scr = els[0].closest('.screen');
+  const memKey = curVariant + ':' + (scr && scr.getAttribute(`data-v${curVariant}-screen`) || 'root');
+  const memId = focusMem[memKey];
+  const el = (memId && els.find(e => e.getAttribute('data-focus-id') === memId)) || els[0];
+  setFocus(el);
+}
+function focusFirst(v, screenName) {
+  const scr = document.querySelector(`[data-v${v}-screen="${screenName}"]`)
+    || document.getElementById('v' + v);
+  const first = scr.querySelector('.focusable');
+  if (first) setFocus(first); else focusedEl = null;
+}
+
+/* ================= activation dispatch ================= */
+document.addEventListener('click', e => {
+  const f = e.target.closest('.focusable');
+  if (f) { setFocus(f); activate(f); }
+});
+document.addEventListener('keydown', e => {
+  if (e.target.matches('input, textarea, [contenteditable]')) return;
+  if (e.key === '[') { cycle(-1); return; }
+  if (e.key === ']') { cycle(1); return; }
+  const map = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+  if (map[e.key]) { e.preventDefault(); moveFocus(...map[e.key]); return; }
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const v = curVariant;
+    if (state.pairPhase !== 'idle' && (topScreen(v) === 'pair' || v === 'C')) { advancePair(); return; }
+    if (focusedEl) activate(focusedEl);
+    return;
+  }
+  if (e.key === 'Backspace' || e.key === 'Escape') {
+    e.preventDefault();
+    const v = curVariant;
+    if (state.pairPhase !== 'idle' && (topScreen(v) === 'pair' || v === 'C')) { abortPair(); return; }
+    if (v === 'C') {
+      const sheet = document.getElementById('vC-sheet');
+      if (!sheet.classList.contains('hidden-')) { sheet.classList.add('hidden-'); return; }
+    }
+    popScreen(v);
+  }
+});
+function activate(el) {
+  const v = curVariant;
+  const act = el.dataset.act;
+  if (act) ACTIONS[act](el);
+  else if (el.dataset.padId) openDetail(v, +el.dataset.padId);
+}
+
+const ACTIONS = {
+  'vA-add': () => startPair('A'),
+  'vB-add': () => startPair('B'),
+  'vC-ring': () => { if (state.pairPhase === 'idle') startPair('C'); else advancePair(); },
+  'vC-gear': () => pushScreen('C', 'settings'),
+  'vC-info': () => pushScreen('C', 'about'),
+  adapter: el => {
+    const which = el.dataset.adapter;
+    if (which === 'dongle' && !state.donglePresent) return; // honest: nothing inserted
+    state.adapter = which; renderAll();
+  },
+  toggle: el => {
+    const k = el.dataset.toggle;
+    state[k] = !state[k]; renderAll();
+  },
+  retry: () => {
+    const pad = state.pads.find(p => p.id === +(document.getElementById('v' + curVariant).dataset.detailPad || 0));
+    if (!pad) return;
+    pad.status = 'connecting'; renderAll();
+    setTimeout(() => { pad.status = 'connected'; renderAll(); }, 1400);
+  },
+  forget: el => {
+    const id = +el.dataset.padId;
+    state.pads = state.pads.filter(p => p.id !== id);
+    popScreen(curVariant); renderAll();
+  },
+  'vC-chip': el => openDetail('C', +el.dataset.padId),
+};
+
+/* ================= pairing flow (shared phases, per-variant skin) ================= */
+const PAIR = {
+  scan:      { title: 'Searching', sub: 'Hold <b>PS + Create</b> on the controller until the light bar flashes.', step: 'Make sure the pad is charged and awake' },
+  found:     { title: 'Pad found', sub: 'DualSense · revision B', step: 'Establishing the app-owned HID session' },
+  session:   { title: 'Opening session', sub: 'L2CAP control + interrupt channels open · authoring the HID descriptor', step: 'Registering the uhid device' },
+  connected: { title: 'Connected', sub: 'The pad is ready. Input now reaches streaming apps.', step: 'Press A to finish' },
+};
+function startPair(v) {
+  state.pairPhase = 'scan'; state.pairTarget = null;
+  if (topScreen(v) !== 'pair') pushScreen(v, 'pair');
+  renderAll();
+}
+function advancePair() {
+  const order = ['scan', 'found', 'session', 'connected'];
+  const i = order.indexOf(state.pairPhase);
+  if (i < 0 || i === order.length - 1) {
+    state.pairPhase = 'idle'; // in the real app the pad joins the list here
+    popScreen(curVariant); renderAll();
+  } else {
+    state.pairPhase = order[i + 1]; renderAll();
+  }
+}
+function abortPair() { state.pairPhase = 'idle'; popScreen(curVariant); renderAll(); }
+
+/* ================= render helpers ================= */
+const esc = s => s; // prototype
+function chipHTML(status) { const [cls, label] = STATUS_CHIP[status]; return `<span class="chip ${cls}"><span class="dot"></span>${label}</span>`; }
+function padSub(p) {
+  return p.sub + (p.route ? ` · ${p.route === 'app-owned' ? 'app-owned session' : 'stock path'}` : '')
+    + (p.battery != null ? ` · ${p.battery}%` : '');
+}
+function adapterRowsHTML(v) {
+  const on = state.adapter === 'onboard';
+  return `
+    <div class="set-row panel focusable" data-focus-id="${v}-ad-on" data-act="adapter" data-adapter="onboard">
+      <span class="glyph">${icon('radio', 30)}</span>
+      <div><div class="name">Onboard radio</div>
+        <div class="desc">The TV's built-in Bluetooth ${on ? '· pairs and connects pads' : ''}</div></div>
+      <div class="right">${on ? '<span class="chip ok"><span class="dot"></span>Active</span>' : '<span class="radio-dot"></span>'}</div>
+    </div>
+    <div class="set-row panel focusable ${state.donglePresent ? '' : 'is-disabled'}" data-focus-id="${v}-ad-dongle" data-act="adapter" data-adapter="dongle" style="${state.donglePresent ? '' : 'opacity:.45'}">
+      <span class="glyph">${icon('usb', 30)}</span>
+      <div><div class="name">USB dongle</div>
+        <div class="desc">${state.donglePresent ? 'CSR8510 · takes over pairing at boot' : 'No dongle inserted — plug one in to add a second radio'}</div></div>
+      <div class="right">${state.adapter === 'dongle' ? '<span class="chip ok"><span class="dot"></span>Active</span>' : '<span class="radio-dot"></span>'}</div>
+    </div>`;
+}
+function behaviorRowsHTML(v) {
+  return `
+    <div class="set-row panel focusable" data-focus-id="${v}-auto" data-act="toggle" data-toggle="autoRecovery">
+      <span class="glyph">${icon('refresh', 30)}</span>
+      <div><div class="name">Auto-recovery</div>
+        <div class="desc">Watch session health and re-establish dropped pads</div></div>
+      <div class="right"><span class="toggle ${state.autoRecovery ? 'on' : ''}"></span></div>
+    </div>
+    <div class="set-row panel focusable" data-focus-id="${v}-res" data-act="toggle" data-toggle="reduceRes">
+      <span class="glyph">${icon('settings', 30)}</span>
+      <div><div class="name">Reduce interface resolution</div>
+        <div class="desc">Render the backdrop through a small buffer — easier on 4.x-era GPUs</div></div>
+      <div class="right"><span class="toggle ${state.reduceRes ? 'on' : ''}"></span></div>
+    </div>`;
+}
+function detailHTML(p) {
+  return `
+    <div class="detail-card panel">
+      <h2>${icon('gamepad', 36)} ${esc(p.name)}</h2>
+      <div class="kv">
+        <span class="k">Status</span><span>${chipHTML(p.status)}</span>
+        <span class="k">Route</span><span>${p.route === 'app-owned' ? 'App-owned HID session (raw L2CAP + uhid)' : 'Stock bluetooth2 hid/connect'}</span>
+        <span class="k">Adapter</span><span>${state.adapter === 'onboard' ? 'Onboard radio' : 'USB dongle'}</span>
+        <span class="k">Model</span><span>${esc(p.sub)}</span>
+        ${p.battery != null ? `<span class="k">Battery</span><span>${p.battery}%</span>` : ''}
+        <span class="k">Delivers to</span><span>punktfunk · Moonlight (via /dev/input)</span>
+      </div>
+      <div class="detail-actions">
+        <div class="action-btn panel focusable" data-focus-id="retry" data-act="retry">Reconnect</div>
+        <div class="action-btn panel focusable" data-focus-id="forget" data-act="forget" data-pad-id="${p.id}">Forget pad</div>
+      </div>
+    </div>`;
+}
+
+/* ================= variant A render ================= */
+const A_TABS = [['pads', 'Pads'], ['settings', 'Settings'], ['about', 'About']];
+function renderA() {
+  const tabs = document.getElementById('vA-tabs');
+  tabs.innerHTML = A_TABS.map(([id, label]) =>
+    `<div class="tab panel focusable ${topScreen('A') === id ? '' : ''}" data-focus-id="tab-${id}" data-act="tab" data-tab="${id}">${label}</div>`).join('');
+  const rows = document.getElementById('vA-padrows');
+  rows.innerHTML = state.pads.map(p => `
+    <div class="row panel focusable" data-focus-id="pad-${p.id}" data-pad-id="${p.id}">
+      <span class="glyph">${icon('gamepad', 36)}</span>
+      <div><div class="name">${esc(p.name)}</div><div class="sub">${padSub(p)}</div></div>
+      <div class="right">${chipHTML(p.status)}<span class="route-badge">${ROUTE_LABEL[p.route]}</span></div>
+    </div>`).join('')
+    + `<div class="row add panel focusable" data-focus-id="add" data-act="vA-add">
+         <span class="glyph">${icon('plus', 32)}</span>
+         <div class="name" style="font-size:23px;color:var(--ink-2)">Add a pad — hold PS + Create</div>
+       </div>`;
+  document.getElementById('vA-padcount').textContent =
+    `${state.pads.filter(p => p.status === 'connected').length} pad${state.pads.filter(p => p.status === 'connected').length === 1 ? '' : 's'}`;
+  document.getElementById('vA-adapterrows').innerHTML = adapterRowsHTML('vA');
+  document.getElementById('vA-behaviorrows').innerHTML = behaviorRowsHTML('vA');
+
+  // pairing screen
+  const ph = PAIR[state.pairPhase];
+  const ring = document.getElementById('vA-pair-ring');
+  ring.classList.toggle('scanning', state.pairPhase === 'scan');
+  document.getElementById('vA-pair-title').innerHTML = ph ? ph.title : 'Pairing';
+  document.getElementById('vA-pair-sub').innerHTML = ph ? ph.sub : '';
+  document.getElementById('vA-pair-step').innerHTML = ph ? ph.step : '';
+
+  // detail screen
+  const detail = document.getElementById('vA-detail');
+  const pad = state.pads.find(p => p.id === +(document.getElementById('vA').dataset.detailPad || 0));
+  if (pad) detail.innerHTML = detailHTML(pad);
+}
+function openDetail(v, padId) {
+  document.getElementById('v' + v).dataset.detailPad = padId;
+  pushScreen(v, 'detail');
+  renderAll();
+}
+
+/* ================= variant B render ================= */
+const B_RAIL = [['home', 'Pads', 'gamepad'], ['settings', 'Adapter & settings', 'settings'], ['about', 'About', 'info']];
+function renderB() {
+  document.getElementById('vB-rail').innerHTML =
+    `<div class="logo">${icon('gamepad', 30)} BluePad</div>`
+    + B_RAIL.map(([id, label, ic]) =>
+      `<div class="rail-item focusable ${topScreen('B') === id ? 'active-tab' : ''}" data-focus-id="rail-${id}" data-act="tab" data-tab="${id}">${icon(ic, 26)} ${label}</div>`).join('');
+  const connected = state.pads.filter(p => p.status === 'connected').length;
+  document.getElementById('vB-hero').innerHTML = `
+    <span class="glyph">${icon(state.adapter === 'onboard' ? 'radio' : 'usb', 52)}</span>
+    <div><div class="big">${state.adapter === 'onboard' ? 'Onboard radio active' : 'USB dongle active'}</div>
+      <div class="sub">${connected} pad${connected === 1 ? '' : 's'} connected · auto-recovery ${state.autoRecovery ? 'on' : 'off'} · app-owned sessions first</div></div>`;
+  document.getElementById('vB-cards').innerHTML = state.pads.map(p => `
+    <div class="pad-card panel focusable" data-focus-id="pad-${p.id}" data-pad-id="${p.id}">
+      <div class="top">${icon('gamepad', 34)}<span class="name">${esc(p.name)}</span></div>
+      <div class="sub">${padSub(p)}</div>
+      <div class="chiprow">${chipHTML(p.status)}<span class="route-badge">${ROUTE_LABEL[p.route]}</span></div>
+    </div>`).join('')
+    + `<div class="pad-card add focusable" data-focus-id="add" data-act="vB-add">${icon('plus', 34)} Add a pad</div>`;
+  document.getElementById('vB-adapterrows').innerHTML = adapterRowsHTML('vB');
+  document.getElementById('vB-behaviorrows').innerHTML = behaviorRowsHTML('vB');
+
+  // detail
+  const padEl = document.getElementById('vB-detail');
+  const pad = state.pads.find(p => p.id === +(document.getElementById('vB').dataset.detailPad || 0));
+  if (pad) padEl.innerHTML = detailHTML(pad);
+
+  // pairing sheet: step list
+  const order = ['scan', 'found', 'session', 'connected'];
+  const cur = order.indexOf(state.pairPhase);
+  const STEPS = ['Pad visible (PS + Create held)', 'L2CAP channels open', 'HID descriptor authored · uhid registered', 'Input flowing'];
+  document.getElementById('vB-steps').innerHTML = STEPS.map((s, i) => {
+    const cls = state.pairPhase === 'idle' ? 'todo' : i < cur ? 'done' : i === cur ? 'now' : 'todo';
+    return `<div class="step ${cls}"><span class="n">${i < cur ? '✓' : i + 1}</span>${s}</div>`;
+  }).join('');
+  document.getElementById('vB-pair-sub').innerHTML =
+    state.pairPhase === 'connected' ? 'The pad is ready. Press A to finish.' :
+    state.pairPhase === 'idle' ? '' : 'Press A to advance · Back aborts';
+}
+// variant B tab action reuses ACTIONS.tab but for stack B:
+ACTIONS.tab = el => {
+  const v = el.closest('.variant').id === 'vA' ? 'A' : 'B';
+  stacks[v] = [el.dataset.tab]; applyScreens(v); renderAll(); setFocus(el);
+};
+
+/* ================= variant C render ================= */
+function renderC() {
+  const chips = document.getElementById('vC-chips');
+  chips.innerHTML = state.pads.map(p => `
+    <div class="pad-chip panel focusable ${p.status === 'disconnected' ? 'disconnected' : ''}" data-focus-id="chip-${p.id}" data-act="vC-chip" data-pad-id="${p.id}">
+      ${icon('gamepad', 24)} ${esc(p.name)} <span class="dot"></span>
+      <span class="sub">${p.route === 'app-owned' ? 'session' : 'stock'}</span>
+    </div>`).join('');
+  const t = document.getElementById('vC-ring-t'), s = document.getElementById('vC-ring-s');
+  const ring = document.getElementById('vC-ring');
+  if (state.pairPhase !== 'idle') {
+    ring.classList.add('scanning');
+    t.textContent = PAIR[state.pairPhase].title;
+    s.innerHTML = PAIR[state.pairPhase].sub;
+  } else {
+    ring.classList.remove('scanning');
+    const connected = state.pads.filter(p => p.status === 'connected').length;
+    t.textContent = 'Pair a pad';
+    s.textContent = connected ? `${connected} connected · hold PS + Create to add` : 'Hold PS + Create on the controller';
+  }
+  document.getElementById('vC-adapterrows').innerHTML = adapterRowsHTML('vC');
+  document.getElementById('vC-behaviorrows').innerHTML = behaviorRowsHTML('vC');
+  const sheet = document.getElementById('vC-sheet');
+  const pad = state.pads.find(p => p.id === +(document.getElementById('vC').dataset.detailPad || 0));
+  if (pad && !sheet.classList.contains('hidden-')) {
+    sheet.innerHTML = `<div><b style="font-size:24px">${esc(pad.name)}</b>
+      <div style="color:var(--ink-3);font-size:18px;margin-top:4px">${padSub(pad)}</div></div>
+      <div class="kv"><span><span class="k">Route</span>${ROUTE_LABEL[pad.route]}</span>
+      <span><span class="k">Adapter</span>${state.adapter === 'onboard' ? 'Onboard' : 'Dongle'}</span>
+      <span><span class="k">Status</span>${STATUS_CHIP[pad.status][1]}</span></div>
+      ${chipHTML(pad.status)}`;
+  }
+}
+ACTIONS['vC-chip'] = el => {
+  const sheet = document.getElementById('vC-sheet');
+  document.getElementById('vC').dataset.detailPad = el.dataset.padId;
+  sheet.classList.remove('hidden-'); renderC();
+};
+
+/* ================= hints ================= */
+function renderHints(v) {
+  const el = document.getElementById(`v${v}-hints`);
+  if (!el) return;
+  const top = topScreen(v);
+  let hints = `<span class="hint"><span class="keycap">A</span> Select</span><span class="hint"><span class="keycap">B</span> Back</span>`;
+  if (top === 'pair') hints = `<span class="hint"><span class="keycap">A</span> ${state.pairPhase === 'connected' ? 'Finish' : 'Continue'}</span><span class="hint"><span class="keycap">B</span> Abort</span>`;
+  el.innerHTML = hints;
+}
+function renderSwitcherState() {
+  const connected = state.pads.filter(p => p.status === 'connected').length;
+  document.getElementById('sw-state').textContent =
+    `state: ${connected} connected · adapter=${state.adapter} · screen=${topScreen(curVariant)}`;
+}
+
+/* ================= master render ================= */
+function renderAll() {
+  // remember focus across the innerHTML rebuilds
+  const fid = focusedEl ? focusedEl.getAttribute('data-focus-id') : null;
+  renderA(); renderB(); renderC(); applyScreens(curVariant);
+  if (fid) {
+    const again = document.querySelector(`#v${curVariant} .focusable[data-focus-id="${fid}"]`);
+    if (again && !again.closest('.screen.hidden-') && !again.closest('.screen.behind')) setFocus(again);
+    else restoreFocus();
+  }
+}
+
+/* ================= boot ================= */
+function fitStage() {
+  const wrap = document.getElementById('stage-wrap');
+  const s = Math.min(wrap.clientWidth / 1920, wrap.clientHeight / 1080);
+  document.getElementById('stage').style.transform = `scale(${s})`;
+}
+window.addEventListener('resize', fitStage);
+fitStage();
+renderSwitcher();
+setVariant(curVariant, false);
+</script>
+</body>
+</html>
