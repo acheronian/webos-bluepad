@@ -331,8 +331,8 @@ visitor would be re-implementing a service the derive macros provide.
 | Template Method | consider | pairing-flow skeleton, decided when that flow is written |
 | Visitor | **skip** | serde's derive macros are the visitor; no hierarchy to walk |
 
-**Balance:** 9 adopt (2 of them idiomatic-free), 6 consider (all with a named
-lighter form and an upgrade trigger), 7 skip. The skips are the patterns whose
+**Balance:** 9 adopt, 5 consider (all with a named
+lighter form and an upgrade trigger), 8 skip. The skips are the patterns whose
 problem statements BluePad doesn't have (tree structures, vast object counts,
 undoable command histories, dynamic handler chains, double dispatch) — skipping
 them *is* the anti-over-engineering verdict the ticket asked for.
