@@ -485,7 +485,11 @@ const STATUS_CHIP = {
   disconnected: ['off', 'Disconnected'], error: ['err', 'Connect failed'],
 };
 
-/* ================= variant switcher ================= */
+/* ================= variant + sub-variant selection =================
+   One refresh path: every selection change — pill clicks, ←/→ arrows,
+   [ ] keys, manual URL edits — funnels through applySelection, which
+   re-renders the switcher, the stage, and focus from the parsed state.
+   Nothing is patched in place, so nothing can go stale. */
 const VARIANTS = [
   { key: 'A', name: 'Shell tabs' },
   { key: 'B', name: 'Rail + cards' },
@@ -498,14 +502,15 @@ const SUBS = [
   { key: 'about', label: 'About' },
   { key: 'search', label: 'Device search' },
 ];
-(function parseLoc() {
+function parseLoc() {
   const h = new URLSearchParams((location.hash || '').replace(/^#/, '') || location.search);
   curVariant = ['A', 'B', 'C'].includes(h.get('variant')) ? h.get('variant') : 'B'; // B won the shell
   for (const k of ['set', 'about', 'search']) {
     const n = parseInt(h.get(k), 10);
     if (n >= 1 && n <= 3) sub[k] = n;
   }
-})();
+}
+parseLoc();
 function writeHash() {
   history.replaceState(null, '',
     `#variant=${curVariant}&set=${sub.set}&about=${sub.about}&search=${sub.search}`);
@@ -513,11 +518,15 @@ function writeHash() {
 const stacks = { A: ['pads'], B: ['home'], C: ['ring'] };  // screen stacks per variant
 const focusMem = {};   // remembered focus per (variant, screen)
 
-function setVariant(key, push) {
-  curVariant = key;
+function applySelection(sel) {
+  if (sel && sel.variant) curVariant = sel.variant;
+  if (sel && sel.sub) sub[sel.sub.key] = sel.sub.n;
   writeHash();
   document.querySelectorAll('.variant').forEach(v => v.classList.remove('active'));
-  document.getElementById('v' + key).classList.add('active');
+  document.getElementById('v' + curVariant).classList.add('active');
+  // clear every focus visual — old-variant elements keep .focused otherwise
+  document.querySelectorAll('.focused').forEach(el => el.classList.remove('focused'));
+  focusedEl = null;
   renderSwitcher();
   renderAll();
   restoreFocus();
@@ -525,26 +534,32 @@ function setVariant(key, push) {
 function renderSwitcher() {
   document.getElementById('sw-cur').textContent =
     `${curVariant} (${VARIANTS.find(v => v.key === curVariant).name})`;
-  const pills = document.getElementById('sw-pills');
-  pills.innerHTML = VARIANTS.map(v =>
+  document.getElementById('sw-pills').innerHTML = VARIANTS.map(v =>
     `<span class="pill ${v.key === curVariant ? 'on' : ''}" data-v="${v.key}">${v.key}</span>`).join('');
-  pills.querySelectorAll('.pill').forEach(p =>
-    p.onclick = () => setVariant(p.dataset.v));
-  // round-2 sub-variant pills
-  const subEl = document.getElementById('sw-sub');
-  subEl.innerHTML = SUBS.map(g =>
+  document.getElementById('sw-sub').innerHTML = SUBS.map(g =>
     `<span class="sgroup">${g.label} ${Array.from({ length: 3 }, (_, i) =>
       `<span class="pill ${sub[g.key] === i + 1 ? 'on' : ''}" data-sub="${g.key}" data-n="${i + 1}">${i + 1}</span>`).join('')}</span>`
   ).join('<span class="sdiv"></span>');
-  subEl.querySelectorAll('.pill').forEach(p =>
-    p.onclick = () => { sub[p.dataset.sub] = +p.dataset.n; writeHash(); renderAll(); restoreFocus(); });
 }
-document.getElementById('sw-prev').onclick = () => cycle(-1);
-document.getElementById('sw-next').onclick = () => cycle(1);
+/* one delegated listener for arrows + both pill rows (no rebinding per render) */
+document.getElementById('switcher').addEventListener('click', e => {
+  const vp = e.target.closest('[data-v]');
+  if (vp) { applySelection({ variant: vp.dataset.v }); return; }
+  const sp = e.target.closest('[data-sub]');
+  if (sp) { applySelection({ sub: { key: sp.dataset.sub, n: +sp.dataset.n } }); return; }
+  if (e.target.closest('#sw-prev')) cycle(-1);
+  else if (e.target.closest('#sw-next')) cycle(1);
+});
 function cycle(d) {
   const i = VARIANTS.findIndex(v => v.key === curVariant);
-  setVariant(VARIANTS[(i + d + VARIANTS.length) % VARIANTS.length].key);
+  applySelection({ variant: VARIANTS[(i + d + VARIANTS.length) % VARIANTS.length].key });
 }
+/* manual URL edits / back-forward refresh through the same path */
+window.addEventListener('hashchange', () => {
+  const before = curVariant + JSON.stringify(sub);
+  parseLoc();
+  if (curVariant + JSON.stringify(sub) !== before) applySelection();
+});
 
 /* ================= screen stacks (push/pop per variant) ================= */
 function topScreen(v) { return stacks[v][stacks[v].length - 1]; }
@@ -633,9 +648,8 @@ function moveFocus(dx, dy) {
 function restoreFocus() {
   const els = focusables();
   if (!els.length) { focusedEl = null; return; }
-  const scr = els[0].closest('.screen');
-  const memKey = curVariant + ':' + (scr && scr.getAttribute(`data-v${curVariant}-screen`) || 'root');
-  const memId = focusMem[memKey];
+  const top = topScreen(curVariant);
+  const memId = focusMem[curVariant + ':' + top] || focusMem[curVariant + ':root'];
   const el = (memId && els.find(e => e.getAttribute('data-focus-id') === memId)) || els[0];
   setFocus(el);
 }
@@ -643,7 +657,8 @@ function focusFirst(v, screenName) {
   const scr = document.querySelector(`[data-v${v}-screen="${screenName}"]`)
     || document.getElementById('v' + v);
   const first = scr.querySelector('.focusable');
-  if (first) setFocus(first); else focusedEl = null;
+  if (first) setFocus(first);
+  else { if (focusedEl) focusedEl.classList.remove('focused'); focusedEl = null; }
 }
 
 /* ================= activation dispatch ================= */
@@ -1075,8 +1090,7 @@ function fitStage() {
 }
 window.addEventListener('resize', fitStage);
 fitStage();
-renderSwitcher();
-setVariant(curVariant, false);
+applySelection();
 </script>
 </body>
 </html>
