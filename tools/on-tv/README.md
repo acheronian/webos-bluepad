@@ -11,8 +11,9 @@ binaries pushed over SSH, no installer involved.
   kernel 4.4 / armv7).
 - The tier probe: `luna-send` reachable → Root tier.
 - The stock `bluetooth2` adapter against the live stack: `device/getStatus`
-  parsing, the pairing flow (`adapter/pairDevice` — unverified, see #32),
-  `hid/connect` with real error codes, presence-consistency health.
+  parsing, the pairing flow (`adapter/pair` subscription — evidence-locked via
+  the legacy file-by-file pass, see #32), `hid/connect` with real error codes,
+  presence-consistency health.
 - The socket seam end-to-end: daemon → Unix socket → `bluepad-ui` state view.
 - Rotating logs land in the data dir.
 
@@ -57,6 +58,45 @@ bluepad-ui forget <addr>    # remove a pad (registry + settings)
 bluepad-ui rumble <addr>    # rumble test pulse
 bluepad-ui diag <addr>       # pad diagnostic readings (app-owned pads)
 ```
+
+## Pairing probe (raw surface, before the daemon)
+
+`tools/on-tv/pair-probe.sh` exercises the exact bluetooth2 call sequence the
+daemon's stock path uses (`ls2.rs`), with every reply logged as a specimen.
+Run it before the daemon flow to settle the raw surface in isolation:
+
+```
+TV_SSH=root@tv.local tools/on-tv/pair-probe.sh        # auto-picks the first candidate
+TV_SSH=root@tv.local tools/on-tv/pair-probe.sh <MAC>  # or a known address
+```
+
+Put the pad in pairing mode first. One run settles, in order:
+
+1. **`luna-send -i` subscribe mode** — the one call the original probe harness
+   never proved (only `-n 1` one-shots); the daemon's pair subscription *and*
+   pairable gate both depend on it. The probe aborts here if it doesn't stream.
+2. The **pairable gate** (`adapter/awaitPairingRequests`).
+3. **Discovery candidates** via `device/getStatus` (unpaired, named,
+   peripheral-class — the daemon's candidate filter).
+4. The **`adapter/pair` subscription event stream** (`displayPasskey` /
+   `endPairing` …), 30 s bound, incoming-flow completion included.
+5. **`hid/connect`** with real error codes; on success, the teardown
+   specimens **`hid/disconnect`** and **`adapter/unpair`** (#36's calls).
+6. **`luna-send-pub` presence** (the last open #32 item).
+
+Notes:
+
+- **`luna-send` stdin quirk (captured on the TV):** one-shots exit silently
+  (zero bytes) when stdin is an open pipe — the probe pins stdin to
+  `/dev/null` on every call for this reason. The daemon pins its spawned
+  subscriptions' stdin too (`ls2.rs`); its one-shots were already safe.
+- Stops a running `bluepad-daemon` first (the probe needs exclusive pairing;
+  it also kills leftover `luna-send -i` subscribers that would hold gate
+  slots) — restart with `deploy.sh` afterwards.
+- Leaves the TV clean: the pad is disconnected and unpaired at the end. If
+  `hid/connect` fails, it stays paired for inspection (cleanup command printed).
+- All output is teed to `/tmp/bluepad-probes/pair-probe-<epoch>.log` on the TV —
+  copy it back into `probe-logs/` as a specimen.
 
 ### What to look for, per test
 
