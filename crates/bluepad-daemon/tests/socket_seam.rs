@@ -320,9 +320,18 @@ async fn forget_removes_the_pad_over_the_seam() {
     let f = Fixture::new(vec![dualsense_entry("a0:fa:9c:62:7d:01")], vec![]).await;
     f.run_daemon().await;
     let mut client = Client::connect(&f.socket_path).await;
+    client.send(Request::Subscribe).await;
     let address: BdAddr = "a0:fa:9c:62:7d:01".parse().unwrap();
     let response = client.request(Request::ForgetPad { address }).await;
     assert!(matches!(response, Response::Ok), "{response:?}");
+    // Forget is the only removal — it crosses the seam as a notification.
+    let latest = client.await_notification().await;
+    let mut all = client.seen.clone();
+    all.push(latest);
+    assert!(
+        all.iter().any(|n| matches!(n, Notification::PadRemoved { address: a } if *a == address)),
+        "PadRemoved notification (seen: {all:?})"
+    );
     match client.request(Request::GetState).await {
         Response::State(state) => assert!(state.pads.is_empty()),
         other => panic!("expected State, got {other:?}"),

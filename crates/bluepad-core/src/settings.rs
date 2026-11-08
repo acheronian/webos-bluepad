@@ -11,7 +11,7 @@ use crate::kit::{Lightbar, PlayerIndex, Rumble};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 pub const SCHEMA_VERSION: u32 = 1;
 
@@ -164,17 +164,23 @@ pub struct SettingsStore {
 
 impl SettingsStore {
     /// Load the document; an unparseable or absent document falls back to
-    /// defaults (the bad one is kept as `.bad` for inspection).
+    /// defaults, and the bad one is renamed `.bad` for inspection (the
+    /// punktfunk precedent).
     pub fn load(path: impl Into<PathBuf>) -> SettingsStore {
         let path = path.into();
-        let doc = fs::read_to_string(&path)
-            .ok()
-            .and_then(|text| match serde_json::from_str::<SettingsDocument>(&text) {
+        let doc = fs::read_to_string(&path).ok().and_then(|text| {
+            match serde_json::from_str::<SettingsDocument>(&text) {
                 Ok(doc) if doc.schema_version <= SCHEMA_VERSION => Some(doc),
-                _ => None,
-            })
-            .unwrap_or_default();
-        SettingsStore { path, doc }
+                _ => {
+                    let _ = fs::rename(&path, path.with_extension("json.bad"));
+                    None
+                }
+            }
+        });
+        SettingsStore {
+            doc: doc.unwrap_or_default(),
+            path,
+        }
     }
 
     /// Persist atomically: write to a temp file next to the target, then
@@ -222,12 +228,6 @@ impl SettingsStore {
         self.doc.pads.remove(&address.key());
         self.save()
     }
-}
-
-/// Rename an unparseable document aside (the `.bad` policy), used by callers
-/// that want the forensic copy kept even when `load` already fell back.
-pub fn quarantine_bad_document(path: &Path) {
-    let _ = fs::rename(path, path.with_extension("json.bad"));
 }
 
 #[cfg(test)]

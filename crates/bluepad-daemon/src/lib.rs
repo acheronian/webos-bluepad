@@ -318,6 +318,50 @@ async fn serve_connection(
                                     break;
                                 }
                             }
+                            Request::ForgetPad { address } => {
+                                let response = dispatch_versioned(
+                                    &supervisor,
+                                    &daemon_version,
+                                    Request::ForgetPad { address },
+                                );
+                                if matches!(response, Response::Ok) {
+                                    // Forget is the only removal — the pad
+                                    // disappearing is a notification, not a
+                                    // poll.
+                                    let _ = notifications
+                                        .send(Notification::PadRemoved { address });
+                                }
+                                let message = ServerMessage::Response { id, response };
+                                if write_message(&mut write_half, &message).await.is_err() {
+                                    break;
+                                }
+                            }
+                            Request::SetPadSettings { address, settings } => {
+                                let response = dispatch_versioned(
+                                    &supervisor,
+                                    &daemon_version,
+                                    Request::SetPadSettings { address, settings },
+                                );
+                                if matches!(response, Response::Ok) {
+                                    // Live-apply is visible: the pad card
+                                    // re-renders from the seam.
+                                    let status = supervisor
+                                        .lock()
+                                        .unwrap()
+                                        .state()
+                                        .pads
+                                        .into_iter()
+                                        .find(|p| p.address == address);
+                                    if let Some(status) = status {
+                                        let _ = notifications
+                                            .send(Notification::PadChanged(status));
+                                    }
+                                }
+                                let message = ServerMessage::Response { id, response };
+                                if write_message(&mut write_half, &message).await.is_err() {
+                                    break;
+                                }
+                            }
                             other => {
                                 let response =
                                     dispatch_versioned(&supervisor, &daemon_version, other);
@@ -347,18 +391,11 @@ async fn write_message<W: AsyncWriteExt + Unpin>(
 
 /// The tier the daemon actually probed — never assumed from the install
 /// method (glossary: Privilege tier). The capability probe runs at startup:
-/// can we reach the radio transports at all?
+/// the stock adapter answering means the privileged tier.
 pub fn probe_tier(stock_adapter_reachable: bool) -> PrivilegeTier {
     if stock_adapter_reachable {
         PrivilegeTier::Root
     } else {
         PrivilegeTier::Jailed
     }
-}
-
-/// Pairing progress is pushed over the seam as it happens; the helper
-/// exists so the poll loop and request path share one vocabulary.
-#[allow(dead_code)]
-fn pairing_notification(phase: PairingProgress) -> Notification {
-    Notification::PairingProgress(phase)
 }

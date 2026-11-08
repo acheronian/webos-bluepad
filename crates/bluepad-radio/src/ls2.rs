@@ -32,12 +32,19 @@ const CONTEND_LIST: &[(&str, &str)] = &[(
 pub struct Ls2StockTransport {
     /// The luna CLI binary (configurable for tests/probes).
     sender: String,
+    /// The stack's connected-view, shared with watch sessions so their
+    /// health check is presence-consistency against the live radio, not a
+    /// snapshot taken at connect time.
+    presence: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<BdAddr, bool>>>,
 }
 
 impl Ls2StockTransport {
     pub fn new() -> Ls2StockTransport {
         Ls2StockTransport {
             sender: "luna-send".into(),
+            presence: std::sync::Arc::new(std::sync::Mutex::new(
+                std::collections::HashMap::new(),
+            )),
         }
     }
 
@@ -184,9 +191,13 @@ impl StockTransport for Ls2StockTransport {
         let payload = serde_json::json!({ "address": identity.address.to_string() }).to_string();
         let reply = self.call("hid/connect", &payload)?;
         if reply.get("returnValue").and_then(|v| v.as_bool()).unwrap_or(false) {
+            self.presence
+                .lock()
+                .unwrap()
+                .insert(identity.address, true);
             Ok(Box::new(StockWatchSession {
                 address: identity.address,
-                connected: true,
+                presence: self.presence.clone(),
             }))
         } else {
             // The error-129/130 family: map the stock error code to the
@@ -206,7 +217,8 @@ impl StockTransport for Ls2StockTransport {
     }
 
     fn reports_connected(&mut self, address: &BdAddr) -> bool {
-        self.find_device(address)
+        let present = self
+            .find_device(address)
             .ok()
             .flatten()
             .and_then(|d| {
@@ -214,7 +226,9 @@ impl StockTransport for Ls2StockTransport {
                     .and_then(|p| p.as_array())
                     .map(|p| !p.is_empty())
             })
-            .unwrap_or(false)
+            .unwrap_or(false);
+        self.presence.lock().unwrap().insert(*address, present);
+        present
     }
 
     fn contending_services(&mut self) -> Vec<String> {
@@ -244,12 +258,13 @@ fn process_is_live(process: &str) -> bool {
 }
 
 /// The stock session: a watched presence handle. LG's stack owns the HID
-/// session; health is presence-consistency (`connectedProfiles` non-empty
-/// and the pad's input node alive — never a pre-created node, per the
+/// session; health is presence-consistency — the shared presence map is
+/// refreshed by every `reports_connected` poll, so a session the stack
+/// dropped stops counting as flowing (never a pre-created node, per the
 /// blackout specimen's lesson).
 struct StockWatchSession {
     address: BdAddr,
-    connected: bool,
+    presence: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<BdAddr, bool>>>,
 }
 
 impl HidSession for StockWatchSession {
@@ -270,12 +285,16 @@ impl HidSession for StockWatchSession {
     }
 
     fn input_flowing(&self) -> bool {
-        self.connected
+        self.presence
+            .lock()
+            .unwrap()
+            .get(&self.address)
+            .copied()
+            .unwrap_or(false)
     }
 
     fn close(&mut self) -> Result<(), TransportError> {
-        let _ = self.address;
-        self.connected = false;
+        self.presence.lock().unwrap().remove(&self.address);
         Ok(())
     }
 }

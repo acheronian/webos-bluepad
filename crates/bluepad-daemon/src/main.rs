@@ -6,7 +6,6 @@
 //! packaging (deferred per the spec) wires the tiers.
 
 use bluepad_core::connection::Supervisor;
-use bluepad_core::protocol::PrivilegeTier;
 use bluepad_core::registry::PadRegistry;
 use bluepad_core::settings::SettingsStore;
 use bluepad_daemon::logging;
@@ -39,15 +38,12 @@ fn main() -> std::io::Result<()> {
     let registry = PadRegistry::load(dir.join("registry.json"));
     let settings = SettingsStore::load(dir.join("settings.json"));
 
-    // Capability probe, never an install-method assumption: the stock
-    // adapter answerable means the privileged tier.
+    // Capability probe, never an install-method assumption (glossary:
+    // Privilege tier): the stock adapter answering means the privileged
+    // tier; otherwise the honest degraded jailed mode.
     use bluepad_core::transport::StockTransport;
     let mut probe = bluepad_radio::ls2::Ls2StockTransport::new();
-    let tier = if probe.adapter_present() {
-        PrivilegeTier::Root
-    } else {
-        PrivilegeTier::Jailed
-    };
+    let tier = bluepad_daemon::probe_tier(probe.adapter_present());
     tracing::info!("BluePad daemon starting (tier {tier:?})");
 
     let supervisor = Supervisor::new(
