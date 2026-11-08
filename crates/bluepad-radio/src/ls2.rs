@@ -151,12 +151,6 @@ impl Ls2StockTransport {
         }
     }
 
-    fn close_pairable_gate(&mut self) {
-        if let Some(mut child) = self.pairable_gate.take() {
-            let _ = child.kill();
-        }
-    }
-
     fn device_is_paired(&mut self, address: &BdAddr) -> Option<bool> {
         self.find_device(address)
             .ok()
@@ -198,9 +192,11 @@ impl StockTransport for Ls2StockTransport {
     fn stop_discovery(&mut self) {
         // webos-typings + the legacy app: adapter/cancelDiscovery
         // ("returnValue will always contain true, even if there is no
-        // active discovery scan").
+        // active discovery scan"). The pairable gate is deliberately NOT
+        // closed here: it is held for the daemon's lifetime (the legacy
+        // app's own pattern) — killing the subscriber would orphan the
+        // subscription on the hub (errorCode 104 blocks re-opening).
         let _ = self.call("adapter/cancelDiscovery", "{}");
-        self.close_pairable_gate();
     }
 
     fn discovered(&mut self) -> Vec<PadIdentity> {
@@ -374,6 +370,15 @@ impl StockTransport for Ls2StockTransport {
             }
         }
         let _ = child.kill();
+        // Cleanly end the outgoing pairing request: a killed luna-send
+        // leaves the subscription orphaned on the hub (the stack keeps
+        // dead subscribers' slots — captured: errorCode 104 "Only one
+        // subscription allowed"), and the active pairing request would
+        // block every future attempt ("only one pairing request can be
+        // active at a given time" — webos-typings).
+        let payload =
+            serde_json::json!({ "address": identity.address.to_string() }).to_string();
+        let _ = self.call("adapter/cancelPairing", &payload);
         Err(TransportError::new(
             FailureReason::PairingTimeout,
             format!(

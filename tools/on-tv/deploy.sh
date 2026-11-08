@@ -49,11 +49,3 @@ echo "daemon left running; poke it with:"
 echo "  BLUEPAD_SOCKET=$DIR/bluepad.sock $DIR/bluepad-ui <state|watch|pair|cancel|forget|rumble|diag>"
 echo "stop it with: killall bluepad-daemon"
 REMOTE
-
-
-ssh root@192.168.1.179 "luna-send -n 1 luna://com.webos.service.bluetooth2/device/getStatus '{}'" | python3 -c "
-import json,sys
-for d in json.load(sys.stdin)['devices']:
-   print(d['address'], repr(d['name']), 'paired:', d['paired'], 'connected:',
-d['connectedProfiles'])
-   "
