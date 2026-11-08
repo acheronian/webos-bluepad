@@ -227,6 +227,21 @@ impl StockTransport for Ls2StockTransport {
         &mut self,
         identity: &PadIdentity,
     ) -> Result<Box<dyn HidSession>, TransportError> {
+        // The stack auto-connects paired pads when they wake (the P3
+        // probe's <2 s reconnect baseline). In that state hid/connect
+        // refuses with 106 "Device with supplied address is not available"
+        // (captured on the TV) — the session already exists. Adopt the
+        // live session instead of asking for a new one.
+        if self.reports_connected(&identity.address) {
+            self.presence
+                .lock()
+                .unwrap()
+                .insert(identity.address, true);
+            return Ok(Box::new(StockWatchSession {
+                address: identity.address,
+                presence: self.presence.clone(),
+            }));
+        }
         let payload = serde_json::json!({ "address": identity.address.to_string() }).to_string();
         let reply = self.call("hid/connect", &payload)?;
         if reply.get("returnValue").and_then(|v| v.as_bool()).unwrap_or(false) {

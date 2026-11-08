@@ -572,3 +572,23 @@ fn adopt_resets_the_recovery_budget() {
         "fresh budget after user-initiated adopt"
     );
 }
+
+#[test]
+fn stock_pad_already_connected_at_stack_level_is_adopted() {
+    // The stack auto-connects paired pads on wake; hid/connect refuses in
+    // that state (error 106, captured on the TV). The stock transport
+    // adopts the live session instead — no hid/connect call, no failure
+    // script consumed.
+    let mut h = harness_with_registry(vec![stock_entry(1)]);
+    let a = addr(1);
+    // The stack already has the pad connected.
+    h.radio.stock_reconnects(&a);
+    // A failure script that must NOT be consumed (adopting skips
+    // hid/connect entirely).
+    h.radio
+        .inject_stock(&a, vec![bluepad_radio::fake::Injected::StackTimeout; 5]);
+    let start = Instant::now();
+    h.supervisor.reconcile(start);
+    settle(&mut h.supervisor, start);
+    assert_eq!(phase_of(&h.supervisor, &addr(1)), PadPhase::Connected);
+}

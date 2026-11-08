@@ -354,6 +354,14 @@ impl StockTransport for FakeRadio {
         &mut self,
         identity: &PadIdentity,
     ) -> Result<Box<dyn HidSession>, TransportError> {
+        // Mirror the real adapter: a pad the stack already connected is
+        // adopted, not re-connected.
+        if self.with(|r| r.stock_connected.contains(&identity.address)) {
+            return Ok(Box::new(FakeStockWatch {
+                inner: self.inner.clone(),
+                address: identity.address,
+            }));
+        }
         let injected = self.with(|r| script_next(&mut r.stock_connect_script, &identity.address));
         if let Some(injected) = injected {
             match injected {
