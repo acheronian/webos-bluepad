@@ -24,6 +24,17 @@ impl BdAddr {
     pub fn key(&self) -> String {
         self.to_string()
     }
+
+    /// The LS2 wire format: colon-separated lowercase hex
+    /// (`aa:bb:cc:dd:ee:ff`) — the exact string bluetooth2 reports in
+    /// `device/getStatus` and expects in outgoing payloads. Sending the
+    /// normalized key instead makes the stack ACK the call but never
+    /// match the device (captured: phantom `e8473ab85a2f` entry +
+    /// pair subscriptions that never reach `endPairing`).
+    pub fn colon(&self) -> String {
+        let [a, b, c, d, e, f] = self.0;
+        format!("{a:02x}:{b:02x}:{c:02x}:{d:02x}:{e:02x}:{f:02x}")
+    }
 }
 
 impl fmt::Display for BdAddr {
@@ -108,6 +119,12 @@ mod tests {
         }
         assert!("a0:fa:9c:62:7d".parse::<BdAddr>().is_err());
         assert!("zz".parse::<BdAddr>().is_err());
+    }
+
+    #[test]
+    fn wire_format_is_colon_separated() {
+        let a: BdAddr = "a0fa9c627d1a".parse().unwrap();
+        assert_eq!(a.colon(), "a0:fa:9c:62:7d:1a");
     }
 
     #[test]

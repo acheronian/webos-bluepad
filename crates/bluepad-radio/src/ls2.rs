@@ -91,7 +91,12 @@ impl Ls2StockTransport {
                 .get("devices")
                 .and_then(|d| d.as_array())
                 .cloned()
-                .unwrap_or_default())
+                .unwrap_or_default()
+                .into_iter()
+                // stack phantoms (colonless addresses) must never shadow
+                // the real pad's fields — see `is_stack_phantom`
+                .filter(|d| !is_stack_phantom(d))
+                .collect())
         } else {
             Err(TransportError::new(
                 FailureReason::RadioUnavailable,
@@ -135,10 +140,16 @@ impl Ls2StockTransport {
             }
         }
         let uri = format!("{SERVICE}/adapter/awaitPairingRequests");
+        // stdin pinned: luna-send exits silently when stdin is an open
+        // pipe (captured on the TV — see the pair-probe specimen); the
+        // daemon's own stdin is /dev/null under deploy.sh today, but the
+        // init.d supervisor may hand us a pipe. `call()` is safe already:
+        // `.output()` pins stdin to null by default.
         let child = Command::new(&self.sender)
             .arg("-i")
             .arg(&uri)
             .arg("{\"subscribe\":true}")
+            .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::null())
             .spawn();
@@ -296,16 +307,20 @@ impl StockTransport for Ls2StockTransport {
         // accepted for all three DualSense revisions. Gamepads pair
         // without passkey prompts in practice. (`adapter/pairDevice`
         // does not exist — captured on the TV.)
+        // LS2 wire format is colon-separated (captured); the normalized
+        // key is for the registry, never for the stack.
         let payload = serde_json::json!({
-            "address": identity.address.to_string(),
+            "address": identity.address.colon(),
             "subscribe": true,
         })
         .to_string();
         let uri = format!("{SERVICE}/adapter/pair");
+        // stdin pinned — same captured luna-send quirk as the gate above.
         let mut child = Command::new(&self.sender)
             .arg("-i")
             .arg(&uri)
             .arg(&payload)
+            .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::null())
             .spawn()
@@ -389,7 +404,7 @@ impl StockTransport for Ls2StockTransport {
         // block every future attempt ("only one pairing request can be
         // active at a given time" — webos-typings).
         let payload =
-            serde_json::json!({ "address": identity.address.to_string() }).to_string();
+            serde_json::json!({ "address": identity.address.colon() }).to_string();
         let _ = self.call("adapter/cancelPairing", &payload);
         Err(TransportError::new(
             FailureReason::PairingTimeout,
@@ -401,7 +416,7 @@ impl StockTransport for Ls2StockTransport {
 
     fn cancel_pairing(&mut self, address: &BdAddr) {
         // adapter/cancelPairing {address} — one-shot, always succeeds.
-        let payload = serde_json::json!({ "address": address.to_string() }).to_string();
+        let payload = serde_json::json!({ "address": address.colon() }).to_string();
         let _ = self.call("adapter/cancelPairing", &payload);
     }
 
@@ -424,7 +439,7 @@ impl StockTransport for Ls2StockTransport {
                 presence: self.presence.clone(),
             }));
         }
-        let payload = serde_json::json!({ "address": identity.address.to_string() }).to_string();
+        let payload = serde_json::json!({ "address": identity.address.colon() }).to_string();
         let reply = self.call("hid/connect", &payload)?;
         if reply.get("returnValue").and_then(|v| v.as_bool()).unwrap_or(false) {
             self.presence
@@ -482,6 +497,20 @@ impl StockTransport for Ls2StockTransport {
             .map(|(_, label)| label.to_string())
             .collect()
     }
+}
+
+/// A stack phantom: an entry whose `address` string lacks colons. Real
+/// bluetooth2 entries always carry colon-separated addresses; colonless
+/// ones are phantoms the stack registered from earlier colonless outgoing
+/// calls (captured: the `e8473ab85a2f` entry — empty name, cod 0,
+/// typeOfDevice "unknown"). Their fields (paired:false, …) must never
+/// shadow the real pad's state, so `device_status` filters them out.
+fn is_stack_phantom(device: &serde_json::Value) -> bool {
+    device
+        .get("address")
+        .and_then(|a| a.as_str())
+        .map(|a| !a.contains(':'))
+        .unwrap_or(true)
 }
 
 /// A pairing candidate: unpaired, named, and of the Bluetooth peripheral
@@ -583,6 +612,27 @@ mod tests {
             _ => FailureReason::PadUnreachable,
         };
         assert_eq!(reason, FailureReason::StackTimeout);
+    }
+
+    #[test]
+    fn phantom_stack_entries_are_recognized() {
+        // Captured pair: the real pad's entry and the phantom the stack
+        // registered from a colonless outgoing call (probe baseline).
+        let real = serde_json::json!({
+            "name": "DualSense Wireless Controller",
+            "address": "e8:47:3a:b8:5a:2f",
+            "paired": false,
+            "classOfDevice": 9480
+        });
+        let phantom = serde_json::json!({
+            "name": "",
+            "address": "e8473ab85a2f",
+            "paired": false,
+            "typeOfDevice": "unknown",
+            "classOfDevice": 0
+        });
+        assert!(!is_stack_phantom(&real));
+        assert!(is_stack_phantom(&phantom));
     }
 
     #[test]
