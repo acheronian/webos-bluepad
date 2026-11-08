@@ -96,3 +96,7 @@ _Avoid_: Treating it as a user-settable value
 **Connection feedback**:
 The optional pad-side acknowledgement of a true connection: a rumble pulse and lightbar flash on entering Connected, and a farewell pulse on Forget. Scaled by the pad's own settings; never fires on pad-initiated disconnects.
 _Avoid_: Confusing it with game-driven rumble (impossible through uhid on the 4.4 kernel)
+
+**Pad diagnostic**:
+The per-controller input-verification surface on the pad detail screen: every control rendered live with its interpreted label and raw code side by side, backed by a per-session log downloadable from the page. Reads the connection daemon's own parsed HID state, so it exists only for app-owned sessions; stock-path pads keep their truthful connect-only status instead.
+_Avoid_: Treating it as a stock-path characterization tool — verifying stock delivery stays a probe activity
