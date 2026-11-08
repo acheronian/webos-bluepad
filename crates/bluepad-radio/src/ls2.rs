@@ -137,14 +137,48 @@ impl StockTransport for Ls2StockTransport {
     }
 
     fn discovered(&mut self) -> Vec<PadIdentity> {
-        // Devices appear in device/getStatus while discovery runs; new
-        // non-paired pads since the last poll are the candidates.
+        // Devices appear in device/getStatus while discovery runs. Pairing
+        // candidates are unpaired, *named* devices of the peripheral class —
+        // the on-TV smoke test showed raw discovery also yields nameless
+        // neighbor devices (phones and the like) that must not be grabbed.
+        match self.device_status() {
+            Ok(devices) => devices
+                .into_iter()
+                .filter(is_pairing_candidate)
+                .filter_map(|d| {
+                    let address = d
+                        .get("address")
+                        .and_then(|a| a.as_str())
+                        .and_then(|a| a.parse::<BdAddr>().ok())?;
+                    Some(PadIdentity {
+                        address,
+                        name: d
+                            .get("name")
+                            .and_then(|n| n.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        vid: None,
+                        pid: None,
+                    })
+                })
+                .collect(),
+            Err(_) => vec![],
+        }
+    }
+
+    fn paired_devices(&mut self) -> Vec<PadIdentity> {
+        // The stock adapter's view of what is already paired (adoption
+        // source): paired devices with names, from the same captured
+        // device/getStatus shape.
         match self.device_status() {
             Ok(devices) => devices
                 .into_iter()
                 .filter(|d| {
-                    !d.get("paired").and_then(|p| p.as_bool()).unwrap_or(false)
-                        && d.get("name").and_then(|n| n.as_str()).is_some()
+                    d.get("paired").and_then(|p| p.as_bool()).unwrap_or(false)
+                        && d.get("name")
+                            .and_then(|n| n.as_str())
+                            .map(|n| !n.is_empty())
+                            .unwrap_or(false)
                 })
                 .filter_map(|d| {
                     let address = d
@@ -177,8 +211,13 @@ impl StockTransport for Ls2StockTransport {
         if reply.get("returnValue").and_then(|v| v.as_bool()).unwrap_or(false) {
             Ok(())
         } else {
+            // NOTE: `adapter/pairDevice` does not exist on webOS 4.10 —
+            // the on-TV smoke test captured: Unknown method "pairDevice"
+            // for category "/adapter". The verified method (ticket #32)
+            // lands here; until then the refusal surfaces honestly with
+            // the stack's own reply as detail.
             Err(TransportError::new(
-                FailureReason::PairingTimeout,
+                FailureReason::InternalError,
                 format!("pairDevice refused: {reply}"),
             ))
         }
@@ -240,6 +279,24 @@ impl StockTransport for Ls2StockTransport {
             .map(|(_, label)| label.to_string())
             .collect()
     }
+}
+
+/// A pairing candidate: unpaired, named, and of the Bluetooth peripheral
+/// major device class (gamepads report classOfDevice 0x2508 — see the
+/// captured DualSense entries; major class 5 lives in bits 8-12).
+fn is_pairing_candidate(device: &serde_json::Value) -> bool {
+    let unpaired = !device.get("paired").and_then(|p| p.as_bool()).unwrap_or(false);
+    let named = device
+        .get("name")
+        .and_then(|n| n.as_str())
+        .map(|n| !n.is_empty())
+        .unwrap_or(false);
+    let peripheral = device
+        .get("classOfDevice")
+        .and_then(|c| c.as_u64())
+        .map(|c| c & 0x1F00 == 0x0500)
+        .unwrap_or(false);
+    unpaired && named && peripheral
 }
 
 fn process_is_live(process: &str) -> bool {

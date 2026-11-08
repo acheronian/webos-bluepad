@@ -447,3 +447,57 @@ fn auth_rejected_is_curated_as_a_registry_defect() {
     );
     assert!(status.failure.unwrap().reason.is_registry_defect());
 }
+
+#[test]
+fn adopt_paired_migrates_a_stock_paired_pad() {
+    // A pad the TV already paired (stock trust) is adopted into BluePad's
+    // registry and connects without any pairing call.
+    let mut h = harness_with_registry(vec![]);
+    let identity = FakeRadio::dualsense("a0:fa:9c:62:7d:01");
+    h.radio.stock_paired(identity);
+    let a = addr(1);
+    let adopted = h
+        .supervisor
+        .adopt_paired(&a, Instant::now())
+        .expect("adoption");
+    assert_eq!(adopted.address, a);
+    // Registry entry exists with stock provenance.
+    let registry = PadRegistry::load(h.dir.join("registry.json"));
+    let entry = registry.get(&a).expect("registry entry");
+    assert_eq!(entry.provenance, PairingProvenance::Stock);
+    // And it connects on the next polls.
+    let start = Instant::now();
+    h.supervisor.poll(start);
+    h.supervisor.poll(start);
+    assert_eq!(phase_of(&h.supervisor, &a), PadPhase::Connected);
+}
+
+#[test]
+fn adopt_unknown_address_fails_honestly() {
+    let mut h = harness_with_registry(vec![]);
+    let err = h
+        .supervisor
+        .adopt_paired(&addr(9), Instant::now())
+        .unwrap_err();
+    assert_eq!(err.reason, FailureReason::PadUnreachable);
+}
+
+#[test]
+fn pairing_window_reopens_after_failure() {
+    // The on-TV smoke test found this: a failed window blocked retries
+    // with "a pairing window is already open". Terminal outcomes must
+    // allow a new window.
+    let mut h = harness_with_registry(vec![]);
+    let start = Instant::now();
+    h.supervisor.start_pairing(start).unwrap();
+    // Nothing discoverable → the window times out (terminal Failed).
+    h.supervisor.poll(start + bluepad_core::connection::DISCOVERY_WINDOW + Duration::from_secs(1));
+    assert!(matches!(
+        h.supervisor.state().pairing,
+        Some(PairingProgress::Failed(_))
+    ));
+    // A new window must open without an error.
+    h.supervisor
+        .start_pairing(start + Duration::from_secs(120))
+        .expect("pairing window reopens after a terminal outcome");
+}

@@ -80,6 +80,9 @@ pub trait StockTransport: Send {
     /// Pads discovered since the last poll.
     fn discovered(&mut self) -> Vec<PadIdentity>;
 
+    /// Pads the stock stack already considers paired (adoption source).
+    fn paired_devices(&mut self) -> Vec<PadIdentity>;
+
     /// Establish trust (the one-time pairing).
     fn pair(&mut self, identity: &PadIdentity) -> Result<(), TransportError>;
 

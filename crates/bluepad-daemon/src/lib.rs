@@ -58,7 +58,7 @@ pub fn dispatch_versioned(
         Request::StartPairing => match sup.start_pairing(std::time::Instant::now()) {
             Ok(()) => Response::Ok,
             Err(failure) => Response::Error {
-                message: failure.reason.label().to_string(),
+                message: format!("{}: {}", failure.reason.label(), failure.detail),
             },
         },
         Request::CancelPairing => {
@@ -71,6 +71,14 @@ pub fn dispatch_versioned(
                 message: e.to_string(),
             },
         },
+        Request::AdoptPaired { address } => {
+            match sup.adopt_paired(&address, std::time::Instant::now()) {
+                Ok(_identity) => Response::Ok,
+                Err(failure) => Response::Error {
+                    message: format!("{}: {}", failure.reason.label(), failure.detail),
+                },
+            }
+        }
         Request::SetPadSettings { address, settings } => {
             match sup.set_pad_settings(&address, settings) {
                 Ok(()) => Response::Ok,

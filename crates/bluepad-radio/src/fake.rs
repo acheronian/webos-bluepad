@@ -219,6 +219,13 @@ impl FakeRadio {
         self.with(|r| r.incoming.push_back(identity));
     }
 
+    /// Mark a pad as already stock-paired (adoption source).
+    pub fn stock_paired(&self, identity: PadIdentity) {
+        self.with(|r| {
+            r.paired.insert(identity.address);
+        });
+    }
+
     /// Simulate the session going silent (pad sleep, radio degradation).
     pub fn session_goes_silent(&self, address: &BdAddr) {
         self.with(|r| {
@@ -291,6 +298,10 @@ impl StockTransport for FakeRadio {
 
     fn discovered(&mut self) -> Vec<PadIdentity> {
         self.with(|r| std::mem::take(&mut r.discovered_queue))
+    }
+
+    fn paired_devices(&mut self) -> Vec<PadIdentity> {
+        self.with(|r| r.paired.iter().map(|addr| FakeRadio::dualsense(&addr.to_string())).collect())
     }
 
     fn pair(&mut self, identity: &PadIdentity) -> Result<(), TransportError> {

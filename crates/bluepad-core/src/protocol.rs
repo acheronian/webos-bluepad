@@ -105,6 +105,16 @@ pub enum PairingProgress {
     Cancelled,
 }
 
+impl PairingProgress {
+    /// Terminal outcomes end the modal window — a new one may open.
+    pub fn is_terminal(&self) -> bool {
+        matches!(
+            self,
+            PairingProgress::Success(_) | PairingProgress::Failed(_) | PairingProgress::Cancelled
+        )
+    }
+}
+
 /// The full state snapshot.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AppState {
@@ -136,6 +146,10 @@ pub enum Request {
     GetState,
     StartPairing,
     CancelPairing,
+    /// Adopt a pad already paired to the TV by the stock stack into
+    /// BluePad's registry (pairing provenance: stock) and connect it.
+    /// The migration path for users upgrading from stock pairing.
+    AdoptPaired { address: BdAddr },
     ForgetPad { address: BdAddr },
     SetPadSettings { address: BdAddr, settings: PadSettings },
     SetGlobalEnabled { enabled: bool },

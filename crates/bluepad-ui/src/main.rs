@@ -59,6 +59,17 @@ fn main() {
                 .expect("request");
             println!("{response:?}");
         }
+        "adopt" => {
+            let address = expect_address(&args);
+            match client.request(Request::AdoptPaired { address }) {
+                Ok(Response::Ok) => println!("adopted {address} — connecting"),
+                Ok(other) => println!("{other:?}"),
+                Err(e) => {
+                    eprintln!("BluePad: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
         "rumble" => {
             let address = expect_address(&args);
             let response = client
@@ -89,7 +100,7 @@ fn main() {
         }
         other => {
             eprintln!("BluePad: unknown command {other:?}");
-            eprintln!("commands: state | watch | pair | cancel | forget <addr> | rumble <addr> | diag <addr>");
+            eprintln!("commands: state | watch | pair | cancel | adopt <addr> | forget <addr> | rumble <addr> | diag <addr>");
             std::process::exit(1);
         }
     }
@@ -127,10 +138,22 @@ fn watch(client: &DaemonClient) {
 }
 
 fn pair(client: &DaemonClient) {
-    // Subscribe first so no progress notification is missed.
-    client
-        .subscribe(|notification| println!("{}", render_notification(notification)))
-        .expect("subscribe");
+    // Subscribe first so no progress notification is missed; a terminal
+    // phase ends the wait early instead of sleeping the whole window.
+    let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    {
+        let done = done.clone();
+        client
+            .subscribe(move |notification| {
+                println!("{}", render_notification(notification));
+                if let Notification::PairingProgress(phase) = notification {
+                    if phase.is_terminal() {
+                        done.store(true, std::sync::atomic::Ordering::Relaxed);
+                    }
+                }
+            })
+            .expect("subscribe");
+    }
     match client.request(Request::StartPairing) {
         Ok(Response::Ok) => {}
         Ok(other) => {
@@ -142,8 +165,13 @@ fn pair(client: &DaemonClient) {
             std::process::exit(1);
         }
     }
-    // The window is bounded: 60 s discovery + 30 s pair; wait generously.
-    std::thread::sleep(Duration::from_secs(95));
+    // The window is bounded: 60 s discovery + 30 s pair.
+    for _ in 0..95 {
+        if done.load(std::sync::atomic::Ordering::Relaxed) {
+            break;
+        }
+        std::thread::sleep(Duration::from_secs(1));
+    }
     show_state(client);
 }
 

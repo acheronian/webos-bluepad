@@ -653,14 +653,17 @@ impl Supervisor {
     // ------------------------------------------------------------------
 
     /// Start the modal pairing window. Blocked while contending services are
-    /// live, with a named reason (user story 38).
+    /// live, with a named reason (user story 38). A window whose outcome is
+    /// terminal (success, failure, cancelled) may be replaced.
     pub fn start_pairing(&mut self, now: Instant) -> Result<(), Failure> {
         self.now = now;
-        if self.pairing.is_some() {
-            return Err(Failure::new(
-                FailureReason::InternalError,
-                "a pairing window is already open",
-            ));
+        if let Some(window) = &self.pairing {
+            if !window.phase.is_terminal() {
+                return Err(Failure::new(
+                    FailureReason::InternalError,
+                    "a pairing window is already open",
+                ));
+            }
         }
         let contention = self.stock.contending_services();
         if !contention.is_empty() {
@@ -810,6 +813,40 @@ impl Supervisor {
             self.pads.insert(address, machine);
             slot += 1;
         }
+    }
+
+    /// Adopt a pad the stock stack already paired into BluePad's registry,
+    /// then connect it. The migration path for stock-paired pads — no
+    /// pairing call needed, the trust already exists.
+    pub fn adopt_paired(&mut self, address: &BdAddr, now: Instant) -> Result<PadIdentity, Failure> {
+        self.now = now;
+        let identity = self
+            .stock
+            .paired_devices()
+            .into_iter()
+            .find(|d| d.address == *address)
+            .ok_or_else(|| {
+                Failure::new(
+                    FailureReason::PadUnreachable,
+                    "no stock-paired pad with that address",
+                )
+            })?;
+        let entry = RegistryEntry {
+            kind: identity.kind(),
+            identity: identity.clone(),
+            proven_path: None,
+            provenance: PairingProvenance::Stock,
+        };
+        if !self.pads.contains_key(address) {
+            self.pads.insert(*address, PadMachine::new(entry.clone()));
+        }
+        if let Err(e) = self.registry.upsert(entry) {
+            return Err(Failure::new(FailureReason::InternalError, e.to_string()));
+        }
+        if let Some(machine) = self.pads.get_mut(address) {
+            machine.scheduled = Some((Scheduled::Connect, now));
+        }
+        Ok(identity)
     }
 
     /// A pad completed pairing (called by the shell when the stock transport
