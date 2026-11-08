@@ -19,8 +19,14 @@ for bin in bluepad-daemon bluepad-ui; do
     }
 done
 
+# Stop anything still running from a previous smoke test first: a live
+# process holds its binary busy (ETXTBSY) and blocks the overwrite —
+# including leftover `bluepad-ui watch` processes from dropped ssh
+# sessions.
+echo ">> stopping any previous smoke-test processes on the TV"
+ssh "$TV_SSH" "killall bluepad-daemon bluepad-ui 2>/dev/null; rm -f $REMOTE_DIR/bluepad-daemon $REMOTE_DIR/bluepad-ui; mkdir -p $REMOTE_DIR" || true
+
 echo ">> pushing binaries to $TV_SSH:$REMOTE_DIR"
-ssh "$TV_SSH" "mkdir -p $REMOTE_DIR"
 scp -q "$BIN/bluepad-daemon" "$BIN/bluepad-ui" "$TV_SSH:$REMOTE_DIR/"
 
 # Run the remote part as a script via stdin: no nested-quote escaping, and
@@ -29,7 +35,6 @@ echo ">> starting the daemon (root) on the TV"
 ssh "$TV_SSH" bash -s "$REMOTE_DIR" <<'REMOTE'
 set -u
 DIR="$1"
-killall bluepad-daemon 2>/dev/null || true
 sleep 1
 cd "$DIR"
 BLUEPAD_DATA_DIR="$DIR" BLUEPAD_SOCKET="$DIR/bluepad.sock" \
