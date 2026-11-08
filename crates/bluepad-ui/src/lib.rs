@@ -6,6 +6,7 @@
 //! `DaemonClient` facade over the Unix-socket seam.
 
 pub mod client;
+pub mod update;
 pub mod view;
 
 pub use client::{ClientError, DaemonClient};

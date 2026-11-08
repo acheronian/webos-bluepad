@@ -13,13 +13,23 @@
 //! bluepad-ui forget <addr>   # remove a pad (registry + settings)
 //! bluepad-ui rumble <addr>   # rumble test pulse
 //! bluepad-ui diag <addr>     # pad diagnostic readings (app-owned pads)
+//! bluepad-ui check-update    # manual update check (Settings → About row)
+//! bluepad-ui update-source [show|set <url>|clear]  # advanced override
 //! ```
+//!
+//! The default `state` view also runs the 24 h-throttled cold-start update
+//! check — reporting only, pointing at the Homebrew Channel, silent on
+//! failure. The update flow never touches the daemon (spec: Update
+//! behavior); its commands run without the seam.
 
 use bluepad_core::bdaddr::BdAddr;
 use bluepad_core::protocol::{Notification, PairingProgress, Request, Response};
 use bluepad_ui::client::DaemonClient;
+use bluepad_ui::update::{
+    check_update, cold_start_check, render_manual_result, HttpManifestFetcher, UiStateStore,
+};
 use bluepad_ui::view;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 fn socket_path() -> String {
     std::env::var("BLUEPAD_SOCKET").unwrap_or_else(|_| {
@@ -39,11 +49,36 @@ fn connect() -> DaemonClient {
     }
 }
 
+/// Where the UI's own state lives (update-source override, last-check
+/// timestamp, cached result) — beside the socket, overridable for dev.
+fn ui_state_path() -> String {
+    std::env::var("BLUEPAD_UI_STATE").unwrap_or_else(|_| {
+        "/var/lib/webosbrew/com.acheronian.bluepad/ui-state.json".into()
+    })
+}
+
+fn unix_now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_secs())
+        .unwrap_or(0)
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let command = args.first().map(String::as_str).unwrap_or("state");
-    let client = connect();
 
+    // The update flow lives in the UI process alone — these commands run
+    // without the seam (the daemon never phones home).
+    match command {
+        "check-update" => check_update_command(),
+        "update-source" => update_source_command(&args[1..]),
+        _ => run_daemon_command(command, &args),
+    }
+}
+
+fn run_daemon_command(command: &str, args: &[String]) {
+    let client = connect();
     match command {
         "state" => show_state(&client),
         "watch" => watch(&client),
@@ -53,14 +88,14 @@ fn main() {
             println!("{response:?}");
         }
         "forget" => {
-            let address = expect_address(&args);
+            let address = expect_address(args);
             let response = client
                 .request(Request::ForgetPad { address })
                 .expect("request");
             println!("{response:?}");
         }
         "adopt" => {
-            let address = expect_address(&args);
+            let address = expect_address(args);
             match client.request(Request::AdoptPaired { address }) {
                 Ok(Response::Ok) => println!("adopted {address} — connecting"),
                 Ok(other) => println!("{other:?}"),
@@ -71,14 +106,14 @@ fn main() {
             }
         }
         "rumble" => {
-            let address = expect_address(&args);
+            let address = expect_address(args);
             let response = client
                 .request(Request::RumbleTest { address })
                 .expect("request");
             println!("{response:?}");
         }
         "diag" => {
-            let address = expect_address(&args);
+            let address = expect_address(args);
             match client.request(Request::GetDiagnostics { address }) {
                 Ok(Response::Diagnostics(readings)) => {
                     for reading in readings {
@@ -100,7 +135,69 @@ fn main() {
         }
         other => {
             eprintln!("BluePad: unknown command {other:?}");
-            eprintln!("commands: state | watch | pair | cancel | adopt <addr> | forget <addr> | rumble <addr> | diag <addr>");
+            eprintln!("commands: state | watch | pair | cancel | adopt <addr> | forget <addr> | rumble <addr> | diag <addr> | check-update | update-source [show|set <url>|clear]");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// The manual check row (Settings → About in the GL shell): reports both
+/// outcomes, and on failure shows an inline error and asks to retry.
+fn check_update_command() {
+    let mut store = UiStateStore::load(ui_state_path());
+    let fetcher = HttpManifestFetcher::new();
+    match check_update(&fetcher, store.effective_manifest_url(), env!("CARGO_PKG_VERSION")) {
+        Ok(report) => {
+            println!("{}", render_manual_result(&report));
+            let _ = store.record_update_check(report, unix_now());
+        }
+        Err(error) => {
+            eprintln!("Update check failed: {error}");
+            eprintln!("Check the network and try again.");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// The advanced "Update source" setting: the maintainer's fallback when
+/// the feed moves, persisted in the UI's own state — never the daemon's
+/// settings document.
+fn update_source_command(args: &[String]) {
+    let mut store = UiStateStore::load(ui_state_path());
+    match args.first().map(String::as_str) {
+        None | Some("show") => {
+            match store.update_source() {
+                Some(url) => println!("Update source: {url} (override)"),
+                None => println!("Update source: {} (default)", store.effective_manifest_url()),
+            }
+        }
+        Some("set") => {
+            let url = args.get(1).unwrap_or_else(|| {
+                eprintln!("usage: bluepad-ui update-source set <manifest-url>");
+                std::process::exit(1);
+            });
+            if !url.starts_with("http://") && !url.starts_with("https://") {
+                eprintln!("not a manifest URL: {url}");
+                std::process::exit(1);
+            }
+            store
+                .set_update_source(Some(url.clone()))
+                .unwrap_or_else(|error| {
+                    eprintln!("BluePad: cannot save the UI state: {error}");
+                    std::process::exit(1);
+                });
+            println!("Update source set: {url}");
+        }
+        Some("clear") => {
+            store.set_update_source(None).unwrap_or_else(|error| {
+                eprintln!("BluePad: cannot save the UI state: {error}");
+                std::process::exit(1);
+            });
+            println!("Update source cleared — back to {}", store.effective_manifest_url());
+        }
+        Some(other) => {
+            eprintln!("BluePad: unknown update-source action {other:?}");
+            eprintln!("usage: bluepad-ui update-source [show | set <manifest-url> | clear]");
             std::process::exit(1);
         }
     }
@@ -118,8 +215,22 @@ fn expect_address(args: &[String]) -> BdAddr {
 }
 
 fn show_state(client: &DaemonClient) {
+    // The 24 h-throttled cold-start check rides the main view: at most one
+    // attempt per day, cached result inside the window, silent on failure.
+    let mut ui_state = UiStateStore::load(ui_state_path());
+    let banner = cold_start_check(
+        &mut ui_state,
+        &HttpManifestFetcher::new(),
+        unix_now(),
+        env!("CARGO_PKG_VERSION"),
+    );
     match client.state() {
-        Ok(state) => print!("{}", view::render(&state)),
+        Ok(state) => {
+            if let Some(banner) = banner {
+                println!("{banner}");
+            }
+            print!("{}", view::render(&state));
+        }
         Err(e) => {
             eprintln!("BluePad: state unavailable: {e}");
             std::process::exit(1);
