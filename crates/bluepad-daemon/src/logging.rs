@@ -127,6 +127,24 @@ pub fn install(path: impl Into<PathBuf>) {
         .init();
 }
 
+/// The in-process (jailed-tier) variant: file only, never stderr — the
+/// hosting UI process owns the terminal, and Debug-level library noise
+/// must not garble its output (issue #31). Same tier-homed rotated log
+/// as the daemon's.
+pub fn install_file_only(path: impl Into<PathBuf>) {
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
+    let rotating: &'static RotatingFile = Box::leak(Box::new(RotatingFile::new(path)));
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(rotating)
+                .with_ansi(false),
+        )
+        .with(tracing_subscriber::filter::LevelFilter::DEBUG)
+        .init();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

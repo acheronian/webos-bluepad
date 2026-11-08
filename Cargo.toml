@@ -19,3 +19,4 @@ serde_json = "1"
 thiserror = "2"
 bluepad-core = { path = "crates/bluepad-core" }
 bluepad-radio = { path = "crates/bluepad-radio" }
+bluepad-daemon = { path = "crates/bluepad-daemon" }

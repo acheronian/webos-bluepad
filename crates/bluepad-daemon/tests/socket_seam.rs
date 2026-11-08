@@ -34,6 +34,25 @@ impl Fixture {
         pads: Vec<RegistryEntry>,
         discoverable: Vec<PadIdentity>,
     ) -> Fixture {
+        Fixture::build(pads, discoverable, PrivilegeTier::Root, false).await
+    }
+
+    /// The jailed-tier fixture (issue #31): the same fake stock radio,
+    /// the real unavailable app-owned transport behind it — the degraded
+    /// stock-path-only mode.
+    async fn jailed(
+        pads: Vec<RegistryEntry>,
+        discoverable: Vec<PadIdentity>,
+    ) -> Fixture {
+        Fixture::build(pads, discoverable, PrivilegeTier::Jailed, true).await
+    }
+
+    async fn build(
+        pads: Vec<RegistryEntry>,
+        discoverable: Vec<PadIdentity>,
+        tier: PrivilegeTier,
+        unavailable_app_owned: bool,
+    ) -> Fixture {
         let dir = std::env::temp_dir().join(format!(
             "bluepad-seam1-{}-{:?}",
             std::process::id(),
@@ -47,12 +66,17 @@ impl Fixture {
         let settings = SettingsStore::load(dir.join("settings.json"));
         let radio = FakeRadio::new();
         radio.set_discoverable(discoverable);
+        let app_owned: Box<dyn bluepad_core::transport::AppOwnedTransport> = if unavailable_app_owned {
+            Box::new(bluepad_radio::unavailable::UnavailableTransport)
+        } else {
+            Box::new(radio.clone())
+        };
         let supervisor = Supervisor::new(
             Box::new(radio.clone()),
-            Box::new(radio.clone()),
+            app_owned,
             registry,
             settings,
-            PrivilegeTier::Root,
+            tier,
         );
         Fixture {
             supervisor: Arc::new(Mutex::new(supervisor)),
@@ -62,18 +86,34 @@ impl Fixture {
         }
     }
 
-    /// Run the real daemon over the socket until the returned handle is
-    /// dropped/aborted.
-    async fn run_daemon(&self) -> tokio::task::JoinHandle<()> {
+    /// Run the real daemon over the socket; the returned handle stops
+    /// it gracefully (the jailed tier's while-app-open lifetime).
+    fn run_daemon(&self) -> DaemonHandle {
         let daemon = bluepad_daemon::Daemon::bind_shared(
             self.supervisor.clone(),
             &self.socket_path,
             &self.dir,
         )
         .unwrap();
-        tokio::task::spawn(async move {
+        let shutdown = daemon.shutdown_trigger();
+        let task = tokio::task::spawn(async move {
             daemon.run().await.unwrap();
-        })
+        });
+        DaemonHandle { shutdown, task }
+    }
+}
+
+/// A running daemon: stop() ends it gracefully — the socket server
+/// stops, the poll loop ends, and every session closes.
+struct DaemonHandle {
+    shutdown: tokio::sync::watch::Sender<bool>,
+    task: tokio::task::JoinHandle<()>,
+}
+
+impl DaemonHandle {
+    async fn stop(self) {
+        let _ = self.shutdown.send(true);
+        let _ = self.task.await;
     }
 }
 
@@ -168,7 +208,7 @@ fn dualsense_entry(addr: &str) -> RegistryEntry {
 #[tokio::test]
 async fn hello_negotiates_version_and_reports_capabilities_over_the_socket() {
     let f = Fixture::new(vec![], vec![]).await;
-    f.run_daemon().await;
+    f.run_daemon();
     let mut client = Client::connect(&f.socket_path).await;
     let response = client
         .request(Request::Hello {
@@ -195,7 +235,7 @@ async fn hello_negotiates_version_and_reports_capabilities_over_the_socket() {
 #[tokio::test]
 async fn version_skew_is_detected_over_the_socket() {
     let f = Fixture::new(vec![], vec![]).await;
-    f.run_daemon().await;
+    f.run_daemon();
     let mut client = Client::connect(&f.socket_path).await;
     let response = client
         .request(Request::Hello {
@@ -213,7 +253,7 @@ async fn version_skew_is_detected_over_the_socket() {
 #[tokio::test]
 async fn pairing_flow_is_observable_end_to_end_over_the_socket() {
     let f = Fixture::new(vec![], vec![FakeRadio::dualsense("a0:fa:9c:62:7d:2a")]).await;
-    f.run_daemon().await;
+    f.run_daemon();
     let mut client = Client::connect(&f.socket_path).await;
     client.send(Request::Subscribe).await;
 
@@ -262,7 +302,7 @@ async fn pairing_flow_is_observable_end_to_end_over_the_socket() {
 #[tokio::test]
 async fn settings_live_apply_rumble_test_and_diagnostics_flow_through_the_socket() {
     let f = Fixture::new(vec![dualsense_entry("a0:fa:9c:62:7d:01")], vec![]).await;
-    f.run_daemon().await;
+    f.run_daemon();
     // Let the poll loop reconcile + connect the registry pad.
     tokio::time::sleep(Duration::from_millis(700)).await;
     let mut client = Client::connect(&f.socket_path).await;
@@ -307,7 +347,7 @@ async fn settings_live_apply_rumble_test_and_diagnostics_flow_through_the_socket
 async fn contention_error_crosses_the_seam_with_a_named_reason() {
     let f = Fixture::new(vec![], vec![]).await;
     f.radio.set_contention(vec!["com.superd22.bluetoothhid (GamePads helper)".into()]);
-    f.run_daemon().await;
+    f.run_daemon();
     let mut client = Client::connect(&f.socket_path).await;
     let response = client.request(Request::StartPairing).await;
     match response {
@@ -319,7 +359,7 @@ async fn contention_error_crosses_the_seam_with_a_named_reason() {
 #[tokio::test]
 async fn forget_removes_the_pad_over_the_seam() {
     let f = Fixture::new(vec![dualsense_entry("a0:fa:9c:62:7d:01")], vec![]).await;
-    f.run_daemon().await;
+    f.run_daemon();
     let mut client = Client::connect(&f.socket_path).await;
     client.send(Request::Subscribe).await;
     let address: BdAddr = "a0:fa:9c:62:7d:01".parse().unwrap();
@@ -352,7 +392,7 @@ async fn forget_removes_the_pad_over_the_seam() {
 #[tokio::test]
 async fn session_log_is_retrievable_over_the_seam_for_app_owned_sessions() {
     let f = Fixture::new(vec![dualsense_entry("a0:fa:9c:62:7d:01")], vec![]).await;
-    f.run_daemon().await;
+    f.run_daemon();
     // Let the poll loop reconcile + connect the registry pad.
     tokio::time::sleep(Duration::from_millis(700)).await;
     let mut client = Client::connect(&f.socket_path).await;
@@ -402,7 +442,7 @@ async fn session_log_refuses_stock_sessions_with_an_honest_error() {
         vec![],
     )
     .await;
-    f.run_daemon().await;
+    f.run_daemon();
     // The stack already holds the pad: the stock session is adopted.
     let address: BdAddr = "a0:fa:9c:62:7d:01".parse().unwrap();
     f.radio.stock_reconnects(&address);
@@ -434,7 +474,7 @@ async fn export_diagnostics_assembles_the_bundle_over_the_seam() {
     )
     .unwrap();
     std::fs::write(f.dir.join("bluepad.log.1"), "2026-01-01 daemon: rotated\n").unwrap();
-    f.run_daemon().await;
+    f.run_daemon();
     // Let the poll loop reconcile + connect the registry pad.
     tokio::time::sleep(Duration::from_millis(700)).await;
     let mut client = Client::connect(&f.socket_path).await;
@@ -469,7 +509,7 @@ async fn export_diagnostics_assembles_the_bundle_over_the_seam() {
 #[tokio::test]
 async fn export_diagnostics_reflects_the_capability() {
     let f = Fixture::new(vec![], vec![]).await;
-    f.run_daemon().await;
+    f.run_daemon();
     let mut client = Client::connect(&f.socket_path).await;
     match client
         .request(Request::Hello {
@@ -490,4 +530,99 @@ async fn export_diagnostics_reflects_the_capability() {
         }) => assert!(pads.is_empty()),
         other => panic!("expected DiagnosticsBundle, got {other:?}"),
     }
+}
+
+// ---------------------------------------------------------------------
+// The jailed tier over the same seam (issue #31): the degraded
+// stock-path-only, while-app-open mode serves the same protocol as the
+// root daemon — the UI never branches on tier.
+// ---------------------------------------------------------------------
+
+#[tokio::test]
+async fn jailed_daemon_serves_the_same_protocol_as_the_root_one() {
+    let f = Fixture::jailed(vec![], vec![]).await;
+    f.run_daemon();
+    let mut client = Client::connect(&f.socket_path).await;
+    match client
+        .request(Request::Hello {
+            protocol_version: PROTOCOL_VERSION,
+        })
+        .await
+    {
+        Response::Hello {
+            daemon_version,
+            protocol_version,
+            tier,
+            capabilities,
+        } => {
+            assert_eq!(daemon_version, env!("CARGO_PKG_VERSION"));
+            assert_eq!(protocol_version, PROTOCOL_VERSION);
+            assert_eq!(tier, PrivilegeTier::Jailed, "the probed tier crosses the seam");
+            // The same capability surface as the root daemon.
+            for capability in [
+                Capability::Pairing,
+                Capability::Forget,
+                Capability::PadSettings,
+                Capability::RumbleTest,
+                Capability::Diagnostics,
+                Capability::SessionLog,
+                Capability::DiagnosticsExport,
+                Capability::GlobalToggle,
+            ] {
+                assert!(capabilities.contains(&capability), "{capability:?}");
+            }
+        }
+        other => panic!("expected Hello, got {other:?}"),
+    }
+    match client.request(Request::GetState).await {
+        Response::State(state) => {
+            assert_eq!(state.radio.tier, PrivilegeTier::Jailed);
+        }
+        other => panic!("expected State, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn jailed_tier_offers_only_the_stock_path_over_the_seam() {
+    let f = Fixture::jailed(vec![dualsense_entry("a0:fa:9c:62:7d:01")], vec![]).await;
+    // The stack already holds the pad: the stock session is adopted.
+    let address: BdAddr = "a0:fa:9c:62:7d:01".parse().unwrap();
+    f.radio.stock_reconnects(&address);
+    f.run_daemon();
+    tokio::time::sleep(Duration::from_millis(700)).await;
+    let mut client = Client::connect(&f.socket_path).await;
+    match client.request(Request::GetState).await {
+        Response::State(state) => {
+            let pad = state.pads.iter().find(|p| p.address == address).unwrap();
+            assert_eq!(pad.phase, PadPhase::Connected);
+            assert_eq!(pad.path, Some(bluepad_core::pad::ConnectionPath::Stock));
+            assert!(pad.stock_only, "the degraded mode is visible per pad");
+        }
+        other => panic!("expected State, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn stopping_the_jailed_daemon_closes_sessions_and_removes_the_socket() {
+    // The connection layer lives only while the app is open: stopping it
+    // closes every session (no ghost input) and the socket goes away.
+    let f = Fixture::jailed(vec![dualsense_entry("a0:fa:9c:62:7d:01")], vec![]).await;
+    let address: BdAddr = "a0:fa:9c:62:7d:01".parse().unwrap();
+    f.radio.stock_reconnects(&address);
+    let daemon = f.run_daemon();
+    tokio::time::sleep(Duration::from_millis(700)).await;
+    let mut client = Client::connect(&f.socket_path).await;
+    match client.request(Request::GetState).await {
+        Response::State(state) => {
+            let pad = state.pads.iter().find(|p| p.address == address).unwrap();
+            assert_eq!(pad.phase, PadPhase::Connected);
+        }
+        other => panic!("expected State, got {other:?}"),
+    }
+    daemon.stop().await;
+    assert!(
+        f.radio.stock_watch_closed(&address),
+        "the stock watch session closed on the layer's lifetime end"
+    );
+    assert!(!f.socket_path.exists(), "the socket went away with the layer");
 }

@@ -7,6 +7,8 @@ license.workspace = true
 
 [dependencies]
 bluepad-core = { workspace = true }
+bluepad-daemon = { workspace = true }
+bluepad-radio = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

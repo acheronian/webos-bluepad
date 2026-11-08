@@ -182,6 +182,9 @@ impl HidSession for FakeStockWatch {
     }
 
     fn close(&mut self) -> Result<(), TransportError> {
+        // Mirrors the real adapter's watch teardown: the stack's
+        // connected-view stops being watched for this pad.
+        self.inner.lock().unwrap().stock_watches_closed.insert(self.address);
         Ok(())
     }
 }
@@ -199,6 +202,7 @@ struct RadioInner {
     discovery_calls: usize,
     sessions: HashMap<BdAddr, FakeSession>,
     stock_connected: HashSet<BdAddr>,
+    stock_watches_closed: HashSet<BdAddr>,
     unpair_fails: bool,
 }
 
@@ -319,6 +323,12 @@ impl FakeRadio {
     /// Whether the stack currently holds the pad's HID session.
     pub fn stock_connected(&self, address: &BdAddr) -> bool {
         self.with(|r| r.stock_connected.contains(address))
+    }
+
+    /// Whether the stock watch session for this pad was closed (the
+    // session teardown the layer's lifetime end performs).
+    pub fn stock_watch_closed(&self, address: &BdAddr) -> bool {
+        self.with(|r| r.stock_watches_closed.contains(address))
     }
 
     // -- Observation ----------------------------------------------------

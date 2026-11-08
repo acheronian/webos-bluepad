@@ -7,6 +7,7 @@
 //! dispatcher (the Facade whose method set is the jailed UI's capability
 //! surface).
 
+pub mod hosted;
 pub mod logging;
 
 use bluepad_core::connection::Supervisor;
@@ -20,7 +21,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, watch};
 
 /// What the request dispatcher needs besides the supervisor: the daemon's
 /// own version and the tier-homed dir its rotated logs live in (the
@@ -165,6 +166,11 @@ pub struct Daemon {
     notifications: broadcast::Sender<Notification>,
     poll_interval: Duration,
     info: DaemonInfo,
+    /// The graceful-stop trigger: sending `true` stops the socket
+    /// server, ends the poll loop, and closes every session before
+    /// `run` returns — the jailed tier's while-app-open lifetime
+    /// (issue #31).
+    shutdown: watch::Sender<bool>,
 }
 
 impl Daemon {
@@ -178,21 +184,7 @@ impl Daemon {
         socket_path: impl Into<PathBuf>,
         logs_dir: impl Into<PathBuf>,
     ) -> std::io::Result<Daemon> {
-        let socket_path = socket_path.into();
-        if socket_path.exists() {
-            let _ = std::fs::remove_file(&socket_path);
-        }
-        if let Some(dir) = socket_path.parent() {
-            std::fs::create_dir_all(dir)?;
-        }
-        let (notifications, _) = broadcast::channel(256);
-        Ok(Daemon {
-            supervisor: Arc::new(Mutex::new(supervisor)),
-            socket_path,
-            notifications,
-            poll_interval: DEFAULT_POLL_INTERVAL,
-            info: DaemonInfo::new(env!("CARGO_PKG_VERSION"), logs_dir),
-        })
+        Daemon::bind_shared(Arc::new(Mutex::new(supervisor)), socket_path, logs_dir)
     }
 
     /// Bind with an already-shared supervisor (the seam tests drive the
@@ -210,17 +202,25 @@ impl Daemon {
             std::fs::create_dir_all(dir)?;
         }
         let (notifications, _) = broadcast::channel(256);
+        let (shutdown, _) = watch::channel(false);
         Ok(Daemon {
             supervisor,
             socket_path,
             notifications,
             poll_interval: DEFAULT_POLL_INTERVAL,
             info: DaemonInfo::new(env!("CARGO_PKG_VERSION"), logs_dir),
+            shutdown,
         })
     }
 
     pub fn socket_path(&self) -> &Path {
         &self.socket_path
+    }
+
+    /// The graceful-stop trigger (see `Daemon::shutdown`): the jailed
+    /// tier's UI holds a clone and fires it on app exit.
+    pub fn shutdown_trigger(&self) -> watch::Sender<bool> {
+        self.shutdown.clone()
     }
 
     /// Run until the process ends: the poll loop plus the socket server.
@@ -270,23 +270,45 @@ impl Daemon {
         let supervisor = self.supervisor.clone();
         let notifications = self.notifications.clone();
         let info = self.info.clone();
+        let mut shutdown = self.shutdown.subscribe();
         let server = tokio::task::spawn(async move {
+            // A stop that raced the run's start is still a stop.
+            if *shutdown.borrow() {
+                return Ok(());
+            }
             loop {
-                let (stream, _) = match listener.accept().await {
-                    Ok(ok) => ok,
-                    Err(e) => return Err(e),
-                };
-                let supervisor = supervisor.clone();
-                let notifications = notifications.clone();
-                let info = info.clone();
-                tokio::task::spawn(async move {
-                    serve_connection(stream, supervisor, notifications, info).await;
-                });
+                tokio::select! {
+                    accepted = listener.accept() => {
+                        let (stream, _) = match accepted {
+                            Ok(ok) => ok,
+                            Err(e) => return Err(e),
+                        };
+                        let supervisor = supervisor.clone();
+                        let notifications = notifications.clone();
+                        let info = info.clone();
+                        tokio::task::spawn(async move {
+                            serve_connection(stream, supervisor, notifications, info).await;
+                        });
+                    }
+                    _ = shutdown.changed() => return Ok(()),
+                }
             }
         });
 
         let result = server.await;
         poll_loop.abort();
+        // The layer's lifetime end: every session closes — the input node
+        // is destroyed on leaving Connected, no ghost input (issue #31).
+        {
+            let supervisor = self.supervisor.clone();
+            let _ = tokio::task::spawn_blocking(move || {
+                supervisor.lock().unwrap().close_all_sessions();
+            })
+            .await;
+        }
+        // The socket goes away with the layer — a stale socket file would
+        // shadow the next daemon's reachability probe.
+        let _ = std::fs::remove_file(&self.socket_path);
         match result {
             Ok(Ok(())) => Ok(()),
             Ok(Err(e)) => Err(e),

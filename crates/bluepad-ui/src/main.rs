@@ -24,6 +24,12 @@
 //! check — reporting only, pointing at the Homebrew Channel, silent on
 //! failure. The update flow never touches the daemon (spec: Update
 //! behavior); its commands run without the seam.
+//!
+//! The seam itself is tier-honest (issue #31): the root daemon's socket
+//! when it answers; otherwise the probed tier decides — the jailed
+//! tier hosts the connection layer in-process (stock path only) and
+//! connects to it as a regular client, and the layer stops with the
+//! app.
 
 use bluepad_core::bdaddr::BdAddr;
 use bluepad_core::protocol::{
@@ -39,23 +45,121 @@ use bluepad_ui::view;
 use std::net::{IpAddr, Ipv4Addr};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+/// Data dir for persistent state (registry, settings, logs) — the same
+/// env-var override the daemon main uses, so packaging wires the tiers:
+/// the root tier defaults to webosbrew's data dir, the jailed tier
+/// overrides it to the app jail (issue #31: no root assumptions).
+fn data_dir() -> std::path::PathBuf {
+    std::env::var("BLUEPAD_DATA_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| {
+            std::path::PathBuf::from("/var/lib/webosbrew/com.acheronian.bluepad")
+        })
+}
+
 fn socket_path() -> String {
     std::env::var("BLUEPAD_SOCKET").unwrap_or_else(|_| {
-        "/var/lib/webosbrew/com.acheronian.bluepad/bluepad.sock".into()
+        data_dir()
+            .join("bluepad.sock")
+            .to_string_lossy()
+            .into_owned()
     })
 }
 
+/// The hosted connection layer, when this process owns it (the jailed
+/// tier). Parked globally so every exit path can stop it — sessions
+/// must not outlive the app (issue #31).
+static HOSTED: std::sync::Mutex<Option<bluepad_daemon::hosted::HostedDaemon>> =
+    std::sync::Mutex::new(None);
+
+/// Stop the hosted connection layer, if this process owns one: the
+/// socket server ends, and every session closes (the input node is
+/// destroyed — no ghost input).
+fn stop_hosted_layer() {
+    if let Some(hosted) = HOSTED.lock().unwrap().take() {
+        hosted.stop();
+    }
+}
+
+/// Exit without leaking the hosted connection layer.
+fn exit(code: i32) -> ! {
+    stop_hosted_layer();
+    std::process::exit(code)
+}
+
+/// Open the seam to the connection layer. The root daemon's socket when
+/// it answers; otherwise the probed tier decides — never the install
+/// method (glossary: Privilege tier). The jailed tier hosts the layer
+/// in-process — stock path only — and connects to it as a regular
+/// client, so no screen code branches on tier (issue #31).
 fn connect() -> DaemonClient {
     let socket = socket_path();
+    let daemon_unreachable = |e: bluepad_ui::client::ClientError| -> ! {
+        UiLog::open(ui_log_path()).error(&format!(
+            "cannot reach the connection daemon: {e}"
+        ));
+        eprintln!("BluePad: cannot reach the connection daemon ({e}).");
+        eprintln!("Is the daemon running? Socket: {socket}");
+        exit(1);
+    };
     match DaemonClient::connect(&socket) {
         Ok(client) => client,
         Err(e) => {
-            UiLog::open(ui_log_path()).error(&format!(
-                "cannot reach the connection daemon: {e}"
-            ));
-            eprintln!("BluePad: cannot reach the connection daemon ({e}).");
-            eprintln!("Is the daemon running? Socket: {socket}");
-            std::process::exit(1);
+            // No daemon answered: probe what this environment actually
+            // grants (the stock adapter answering means the privileged
+            // tier — see `bluepad_daemon::probe_tier`).
+            use bluepad_core::transport::StockTransport;
+            let mut probe = bluepad_radio::ls2::Ls2StockTransport::new();
+            match bluepad_daemon::probe_tier(probe.adapter_present()) {
+                PrivilegeTier::Jailed => {
+                    let dir = data_dir();
+                    if let Err(error) = std::fs::create_dir_all(&dir) {
+                        UiLog::open(ui_log_path()).error(&format!(
+                            "cannot create the data dir {}: {error}",
+                            dir.display()
+                        ));
+                        eprintln!(
+                            "BluePad: cannot create the data dir {}: {error}",
+                            dir.display()
+                        );
+                        exit(1);
+                    }
+                    // Tier-homed logs, like the daemon main: the rotated
+                    // log lives in the (jail-homed) data dir — file only,
+                    // never stderr, so the layer's Debug logs never
+                    // garble this UI's own output.
+                    bluepad_daemon::logging::install_file_only(dir.join("bluepad.log"));
+                    let supervisor = bluepad_daemon::hosted::jailed_supervisor(&dir);
+                    match bluepad_daemon::hosted::host(supervisor, &socket, &dir) {
+                        Ok(hosted) => {
+                            *HOSTED.lock().unwrap() = Some(hosted);
+                            // A regular client against the in-process
+                            // seam; the bind races the host's return.
+                            for _ in 0..250 {
+                                if let Ok(client) = DaemonClient::connect(&socket) {
+                                    return client;
+                                }
+                                std::thread::sleep(Duration::from_millis(20));
+                            }
+                            daemon_unreachable(e);
+                        }
+                        Err(error) => {
+                            UiLog::open(ui_log_path()).error(&format!(
+                                "cannot host the connection layer: {error}"
+                            ));
+                            eprintln!(
+                                "BluePad: cannot host the connection layer in-process \
+                                 ({error})."
+                            );
+                            exit(1);
+                        }
+                    }
+                }
+                // The root tier's layer is the daemon's, never the UI's:
+                // hosting in-process would mask a down daemon and put a
+                // second owner on the radio. Honest error instead.
+                PrivilegeTier::Root => daemon_unreachable(e),
+            }
         }
     }
 }
@@ -64,7 +168,7 @@ fn connect() -> DaemonClient {
 /// overridable for dev (spec: Diagnostics and observability).
 fn ui_log_path() -> String {
     std::env::var("BLUEPAD_UI_LOG").unwrap_or_else(|_| {
-        "/var/lib/webosbrew/com.acheronian.bluepad/ui.log".into()
+        data_dir().join("ui.log").to_string_lossy().into_owned()
     })
 }
 
@@ -72,7 +176,10 @@ fn ui_log_path() -> String {
 /// timestamp, cached result) — beside the socket, overridable for dev.
 fn ui_state_path() -> String {
     std::env::var("BLUEPAD_UI_STATE").unwrap_or_else(|_| {
-        "/var/lib/webosbrew/com.acheronian.bluepad/ui-state.json".into()
+        data_dir()
+            .join("ui-state.json")
+            .to_string_lossy()
+            .into_owned()
     })
 }
 
@@ -120,7 +227,7 @@ fn run_daemon_command(command: &str, args: &[String]) {
                 Ok(other) => println!("{other:?}"),
                 Err(e) => {
                     eprintln!("BluePad: {e}");
-                    std::process::exit(1);
+                    exit(1);
                 }
             }
         }
@@ -151,7 +258,7 @@ fn run_daemon_command(command: &str, args: &[String]) {
                 Ok(other) => println!("{other:?}"),
                 Err(e) => {
                     eprintln!("BluePad: {e}");
-                    std::process::exit(1);
+                    exit(1);
                 }
             }
         }
@@ -162,9 +269,14 @@ fn run_daemon_command(command: &str, args: &[String]) {
                  rumble <addr> | diag <addr> | session-log <addr> [file] | export | export-usb [path] | \
                  check-update | update-source [show|set <url>|clear]"
             );
-            std::process::exit(1);
+            exit(1);
         }
     }
+    // The command is done — the app is closing. If this process hosted
+    // the connection layer (jailed tier), its lifetime ends here:
+    // every session closes, no ghost input (issue #31).
+    drop(client);
+    stop_hosted_layer();
 }
 
 /// The per-session input log, downloadable from the pad diagnostic page
@@ -181,7 +293,7 @@ fn session_log_command(client: &DaemonClient, args: &[String]) {
         }
         Err(e) => {
             eprintln!("BluePad: {e}");
-            std::process::exit(1);
+            exit(1);
         }
     };
     let text = render_session_log(&address, &entries);
@@ -190,7 +302,7 @@ fn session_log_command(client: &DaemonClient, args: &[String]) {
             Ok(()) => println!("Session log written to {path} ({} events)", entries.len()),
             Err(e) => {
                 eprintln!("BluePad: cannot write {path}: {e}");
-                std::process::exit(1);
+                exit(1);
             }
         },
         None => print!("{text}"),
@@ -222,7 +334,7 @@ fn export_command(client: &DaemonClient) {
         Ok(tar) => tar,
         Err(e) => {
             eprintln!("BluePad: {e}");
-            std::process::exit(1);
+            exit(1);
         }
     };
     let exporter = match export::LanExporter::start(
@@ -237,7 +349,7 @@ fn export_command(client: &DaemonClient) {
             UiLog::open(ui_log_path())
                 .error(&format!("cannot start the LAN export: {e}"));
             eprintln!("BluePad: cannot start the LAN export: {e}");
-            std::process::exit(1);
+            exit(1);
         }
     };
     println!("Diagnostics export is live:");
@@ -264,7 +376,7 @@ fn export_usb_command(client: &DaemonClient, args: &[String]) {
         Ok(state) => state.radio.tier,
         Err(e) => {
             eprintln!("BluePad: state unavailable: {e}");
-            std::process::exit(1);
+            exit(1);
         }
     };
     if tier != PrivilegeTier::Root {
@@ -272,13 +384,13 @@ fn export_usb_command(client: &DaemonClient, args: &[String]) {
             "BluePad: USB export needs the root tier; this daemon runs jailed. \
              Use the LAN export instead (`bluepad-ui export`)."
         );
-        std::process::exit(1);
+        exit(1);
     }
     let tar = match request_bundle_tar(client) {
         Ok(tar) => tar,
         Err(e) => {
             eprintln!("BluePad: {e}");
-            std::process::exit(1);
+            exit(1);
         }
     };
     let written = match args.get(1) {
@@ -286,7 +398,7 @@ fn export_usb_command(client: &DaemonClient, args: &[String]) {
             Ok(()) => std::path::PathBuf::from(path),
             Err(e) => {
                 eprintln!("BluePad: cannot write {path}: {e}");
-                std::process::exit(1);
+                exit(1);
             }
         },
         None => {
@@ -297,7 +409,7 @@ fn export_usb_command(client: &DaemonClient, args: &[String]) {
                     Ok(path) => path,
                     Err(e) => {
                         eprintln!("BluePad: cannot write to {}: {e}", mount.display());
-                        std::process::exit(1);
+                        exit(1);
                     }
                 },
                 None => {
@@ -305,7 +417,7 @@ fn export_usb_command(client: &DaemonClient, args: &[String]) {
                         "BluePad: no USB drive found (looked under {}).",
                         root.display()
                     );
-                    std::process::exit(1);
+                    exit(1);
                 }
             }
         }
@@ -339,7 +451,7 @@ fn check_update_command() {
         Err(error) => {
             eprintln!("Update check failed: {error}");
             eprintln!("Check the network and try again.");
-            std::process::exit(1);
+            exit(1);
         }
     }
 }
@@ -359,31 +471,31 @@ fn update_source_command(args: &[String]) {
         Some("set") => {
             let url = args.get(1).unwrap_or_else(|| {
                 eprintln!("usage: bluepad-ui update-source set <manifest-url>");
-                std::process::exit(1);
+                exit(1);
             });
             if !url.starts_with("http://") && !url.starts_with("https://") {
                 eprintln!("not a manifest URL: {url}");
-                std::process::exit(1);
+                exit(1);
             }
             store
                 .set_update_source(Some(url.clone()))
                 .unwrap_or_else(|error| {
                     eprintln!("BluePad: cannot save the UI state: {error}");
-                    std::process::exit(1);
+                    exit(1);
                 });
             println!("Update source set: {url}");
         }
         Some("clear") => {
             store.set_update_source(None).unwrap_or_else(|error| {
                 eprintln!("BluePad: cannot save the UI state: {error}");
-                std::process::exit(1);
+                exit(1);
             });
             println!("Update source cleared — back to {}", store.effective_manifest_url());
         }
         Some(other) => {
             eprintln!("BluePad: unknown update-source action {other:?}");
             eprintln!("usage: bluepad-ui update-source [show | set <manifest-url> | clear]");
-            std::process::exit(1);
+            exit(1);
         }
     }
 }
@@ -391,11 +503,11 @@ fn update_source_command(args: &[String]) {
 fn expect_address(args: &[String]) -> BdAddr {
     let raw = args.get(1).unwrap_or_else(|| {
         eprintln!("usage: bluepad-ui <command> <bluetooth-address>");
-        std::process::exit(1);
+        exit(1);
     });
     raw.parse().unwrap_or_else(|_| {
         eprintln!("not a Bluetooth address: {raw}");
-        std::process::exit(1);
+        exit(1);
     })
 }
 
@@ -418,7 +530,7 @@ fn show_state(client: &DaemonClient) {
         }
         Err(e) => {
             eprintln!("BluePad: state unavailable: {e}");
-            std::process::exit(1);
+            exit(1);
         }
     }
 }
@@ -458,7 +570,7 @@ fn pair(client: &DaemonClient) {
         }
         Err(e) => {
             eprintln!("BluePad: {e}");
-            std::process::exit(1);
+            exit(1);
         }
     }
     // The window is bounded: 60 s discovery + 30 s pair.

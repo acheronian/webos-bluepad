@@ -163,17 +163,23 @@ impl PadMachine {
         self.player_index = None;
     }
 
-    fn status(&self, settings: &SettingsStore) -> PadStatus {
-        let stock_only = self
-            .entry
-            .proven_path
-            .map(|p| p == ConnectionPath::Stock)
-            .unwrap_or_else(|| {
-                // A pad is stock-only when its kind has no app-owned kit.
-                kit::factory()
-                    .kit(self.entry.kind, ConnectionPath::AppOwned)
-                    .is_none()
-            });
+    fn status(&self, settings: &SettingsStore, tier: PrivilegeTier) -> PadStatus {
+        let stock_only = match tier {
+            // The jailed tier offers only the stock path — every pad is
+            // stock-only, whatever its kind could do with privileges
+            // (issue #31).
+            PrivilegeTier::Jailed => true,
+            PrivilegeTier::Root => self
+                .entry
+                .proven_path
+                .map(|p| p == ConnectionPath::Stock)
+                .unwrap_or_else(|| {
+                    // A pad is stock-only when its kind has no app-owned kit.
+                    kit::factory()
+                        .kit(self.entry.kind, ConnectionPath::AppOwned)
+                        .is_none()
+                }),
+        };
         PadStatus {
             address: self.entry.identity.address,
             name: self.entry.identity.name.clone(),
@@ -241,7 +247,7 @@ impl Supervisor {
             .pads
             .get(address)
             .expect("pad exists")
-            .status(&self.settings);
+            .status(&self.settings, self.tier);
         Notification::PadChanged(status)
     }
 
@@ -654,10 +660,18 @@ impl Supervisor {
 
         let kind = entry.kind;
         let identity = entry.identity.clone();
-        let preferred = self.registry.route_for(address);
+        // The jailed tier offers only the stock path — app-owned L2CAP is
+        // unavailable without privileges, so neither the registry's default
+        // route nor a path proven on a rooted TV is offered (issue #31).
+        let jailed = self.tier == PrivilegeTier::Jailed;
+        let preferred = if jailed {
+            ConnectionPath::Stock
+        } else {
+            self.registry.route_for(address)
+        };
         // A known pad's proven path sticks; only unproven pads fall back to
         // the other path when the kit matrix allows it.
-        let allow_fallback = entry.proven_path.is_none();
+        let allow_fallback = entry.proven_path.is_none() && !jailed;
         let mut outcome = self.open_session(&identity, preferred, kind);
         if outcome.is_err() && allow_fallback {
             let fallback = match preferred {
@@ -968,6 +982,18 @@ impl Supervisor {
     // Reconcile (crash/standby/wake recovery — reconcile, not restore).
     // ------------------------------------------------------------------
 
+    /// The layer's lifetime end (the jailed tier's app exit): close every
+    /// live session — the input node is destroyed on leaving Connected,
+    /// no ghost input — and park every pad honestly in Paired with no
+    /// scheduled work left behind (issue #31).
+    pub fn close_all_sessions(&mut self) {
+        for machine in self.pads.values_mut() {
+            machine.leave_connected();
+            machine.phase = PadPhase::Paired;
+            machine.scheduled = None;
+        }
+    }
+
     /// Load the registry into machines and schedule staggered reconnects.
     /// Called on daemon start and after standby wake (user stories 9, 10,
     /// 17).
@@ -1059,7 +1085,7 @@ impl Supervisor {
         let mut pads: Vec<PadStatus> = self
             .pads
             .values()
-            .map(|m| m.status(&self.settings))
+            .map(|m| m.status(&self.settings, self.tier))
             .collect();
         pads.sort_by_key(|p| p.address.key());
         let pairing = self.pairing.as_ref().map(|w| w.phase.clone());

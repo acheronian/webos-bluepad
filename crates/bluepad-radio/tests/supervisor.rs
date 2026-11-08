@@ -28,6 +28,17 @@ struct Harness {
 }
 
 fn harness_with_registry(entries: Vec<RegistryEntry>) -> Harness {
+    harness_with_tier(entries, PrivilegeTier::Root)
+}
+
+/// The jailed tier's harness: the same fake radio, but the supervisor
+/// carries the jailed tier (issue #31) — the degraded stock-path-only,
+/// while-app-open mode.
+fn jailed_harness_with_registry(entries: Vec<RegistryEntry>) -> Harness {
+    harness_with_tier(entries, PrivilegeTier::Jailed)
+}
+
+fn harness_with_tier(entries: Vec<RegistryEntry>, tier: PrivilegeTier) -> Harness {
     static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let dir = std::env::temp_dir().join(format!(
         "bluepad-sup-{}-{}",
@@ -46,7 +57,7 @@ fn harness_with_registry(entries: Vec<RegistryEntry>) -> Harness {
         Box::new(radio.clone()),
         registry,
         settings,
-        PrivilegeTier::Root,
+        tier,
     );
     Harness {
         supervisor,
@@ -841,4 +852,72 @@ fn bundle_manifest_carries_the_environment_health_and_pseudonymized_pads() {
         !json.contains("DualSense Wireless Controller"),
         "human names are dropped"
     );
+}
+
+// ---------------------------------------------------------------------
+// The jailed tier: stock path only, while the app is open (issue #31).
+// ---------------------------------------------------------------------
+
+#[test]
+fn jailed_tier_offers_only_the_stock_path() {
+    // The jailed tier's honest bound: app-owned L2CAP is unavailable
+    // without privileges, so only the stock path is offered — even to a
+    // pad whose kind could use both, and whose registry default route
+    // would be app-owned.
+    let mut h = jailed_harness_with_registry(vec![registry_entry(1)]);
+    let start = Instant::now();
+    h.supervisor.reconcile(start);
+    settle(&mut h.supervisor, start);
+    let state = h.supervisor.state();
+    let pad = state.pads.iter().find(|p| p.address == addr(1)).unwrap();
+    assert_eq!(pad.phase, PadPhase::Connected);
+    assert_eq!(
+        pad.path,
+        Some(ConnectionPath::Stock),
+        "the app-owned path is never offered in the jailed tier"
+    );
+    assert!(
+        pad.stock_only,
+        "every pad is stock-only in the jailed tier — the degraded mode renders from the probed tier"
+    );
+    assert!(!pad.diagnostic_available, "no app-owned sessions exist in the jailed tier");
+}
+
+#[test]
+fn jailed_tier_ignores_a_proven_app_owned_path() {
+    // A pad that connected app-owned while the TV was rooted must not
+    // park in backoff on a jailed TV: the proven path never sticks
+    // against the tier's actual capabilities.
+    let entry = RegistryEntry {
+        identity: FakeRadio::dualsense("a0:fa:9c:62:7d:01"),
+        kind: PadKind::DualSense,
+        proven_path: Some(ConnectionPath::AppOwned),
+        provenance: PairingProvenance::Stock,
+    };
+    let mut h = jailed_harness_with_registry(vec![entry]);
+    let start = Instant::now();
+    h.supervisor.reconcile(start);
+    settle(&mut h.supervisor, start);
+    assert_eq!(phase_of(&h.supervisor, &addr(1)), PadPhase::Connected);
+    let state = h.supervisor.state();
+    let pad = state.pads.iter().find(|p| p.address == addr(1)).unwrap();
+    assert_eq!(pad.path, Some(ConnectionPath::Stock));
+}
+
+#[test]
+fn closing_every_session_tears_sessions_down() {
+    // The jailed tier's lifetime ends with the app: every session
+    // closes — the input node is destroyed (leave_connected semantics),
+    // no ghost input — and the pads are honestly Paired again.
+    let mut h = harness_with_registry(vec![registry_entry(1)]);
+    let start = Instant::now();
+    h.supervisor.reconcile(start);
+    settle(&mut h.supervisor, start);
+    assert_eq!(phase_of(&h.supervisor, &addr(1)), PadPhase::Connected);
+    h.supervisor.close_all_sessions();
+    assert!(
+        h.radio.session(&addr(1)).unwrap().is_closed(),
+        "the session closed — no ghost input node"
+    );
+    assert_eq!(phase_of(&h.supervisor, &addr(1)), PadPhase::Paired);
 }

@@ -186,7 +186,20 @@ impl Default for Ls2StockTransport {
     fn default() -> Self {
         Self::new()
     }
+}
 
+impl Drop for Ls2StockTransport {
+    fn drop(&mut self) {
+        // The pairable gate is a child process holding the stack's
+        // awaitPairingRequests subscription. The jailed tier's connection
+        // layer lives only while the app is open (issue #31) — never leave
+        // a gate behind: an orphaned subscriber would hold the pairing
+        // slot and block the next window (errorCode 104).
+        if let Some(mut child) = self.pairable_gate.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
 }
 
 impl StockTransport for Ls2StockTransport {

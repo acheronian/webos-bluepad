@@ -3,7 +3,7 @@
 //! is scraped from logs.
 
 use bluepad_core::pad::PadPhase;
-use bluepad_core::protocol::{AppState, PairingProgress};
+use bluepad_core::protocol::{AppState, PairingProgress, PrivilegeTier};
 
 /// Render the state snapshot as the card texts the real UI would show.
 pub fn render(state: &AppState) -> String {
@@ -20,6 +20,14 @@ pub fn render(state: &AppState) -> String {
         },
         radio.tier,
     ));
+    // The degraded mode renders from the probed tier — never from the
+    // install method (issue #31).
+    if radio.tier == PrivilegeTier::Jailed {
+        out.push_str(
+            "Mode: stock path only — pads stay connected while the app is open \
+             (app-owned sessions and background input need a rooted TV)\n",
+        );
+    }
     if !radio.contention.is_empty() {
         out.push_str(&format!(
             "Contended: {}\n",
@@ -84,6 +92,40 @@ mod tests {
         AdapterState, DiscoveryState, PadStatus, PrivilegeTier, RadioStatus,
     };
     use bluepad_core::settings::PadSettings;
+
+    #[test]
+    fn jailed_tier_renders_the_degraded_mode_from_the_probed_tier() {
+        // The degraded mode is rendered from the probed tier — never from
+        // the install method (issue #31): stock path only, while the app
+        // is open.
+        let state = AppState {
+            radio: RadioStatus {
+                tier: PrivilegeTier::Jailed,
+                adapter: AdapterState::Idle,
+                discovery: DiscoveryState::Idle,
+                contention: vec![],
+                paired: 0,
+                connected: 0,
+                recovering: 0,
+            },
+            pads: vec![],
+            pairing: None,
+        };
+        let text = render(&state);
+        assert!(text.contains("stock path only"), "{text}");
+        assert!(text.contains("while the app is open"), "{text}");
+
+        // The root tier never renders the degraded wording.
+        let rooted = AppState {
+            radio: RadioStatus {
+                tier: PrivilegeTier::Root,
+                ..state.radio
+            },
+            ..state
+        };
+        let text = render(&rooted);
+        assert!(!text.contains("stock path only"), "{text}");
+    }
 
     #[test]
     fn renders_pads_and_radio_honestly() {

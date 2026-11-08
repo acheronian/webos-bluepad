@@ -45,6 +45,8 @@ name = "bluepad-ui"
 version = "0.1.0"
 dependencies = [
  "bluepad-core",
+ "bluepad-daemon",
+ "bluepad-radio",
  "serde",
  "serde_json",
  "thiserror",
