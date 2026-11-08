@@ -592,3 +592,34 @@ fn stock_pad_already_connected_at_stack_level_is_adopted() {
     settle(&mut h.supervisor, start);
     assert_eq!(phase_of(&h.supervisor, &addr(1)), PadPhase::Connected);
 }
+
+#[test]
+fn parked_stock_pad_is_adopted_when_the_stack_auto_connects_it() {
+    // User story 16 for the stock path: a pad that reconnects on its own
+    // initiative is accepted. The budget parks it in Paired; the stack
+    // later auto-connects it (pad woke); the slow presence watch adopts
+    // the live session.
+    let mut h = harness_with_registry(vec![stock_entry(1)]);
+    let a = addr(1);
+    // The pad is unreachable: the whole budget is spent and it parks.
+    h.radio
+        .inject_stock(&a, vec![bluepad_radio::fake::Injected::PadUnreachable; 5]);
+    let start = Instant::now();
+    h.supervisor.reconcile(start);
+    for second in [0u64, 1, 3, 7, 15] {
+        h.supervisor.poll(start + Duration::from_secs(second));
+        h.supervisor.poll(start + Duration::from_secs(second));
+    }
+    assert_eq!(phase_of(&h.supervisor, &a), PadPhase::Paired, "parked");
+
+    // The pad wakes: the stack auto-connects it on its own initiative.
+    h.radio.stock_reconnects(&a);
+    // The presence watch notices on its cadence and adopts.
+    h.supervisor.poll(start + Duration::from_secs(20));
+    h.supervisor.poll(start + Duration::from_secs(20));
+    assert_eq!(
+        phase_of(&h.supervisor, &a),
+        PadPhase::Connected,
+        "parked pad adopted after the stack auto-connected it"
+    );
+}

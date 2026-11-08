@@ -43,6 +43,10 @@ pub const HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(2);
 /// Stagger between pads during a wake reconcile, so multiple pads coming
 /// back from standby don't trample each other (user story 17).
 pub const STAGGER: Duration = Duration::from_secs(1);
+/// How often a parked (budget-spent) pad's presence is re-checked, so a
+/// pad the stack auto-connects on wake is adopted — the stock path's
+/// pad-initiated accept (user story 16).
+pub const PARKED_PRESENCE_INTERVAL: Duration = Duration::from_secs(5);
 
 /// Why the supervisor wants to talk to a pad soon (scheduled work).
 #[derive(Clone, Copy)]
@@ -51,6 +55,8 @@ enum Scheduled {
     Connect,
     /// Re-check health after this instant.
     HealthCheck,
+    /// Re-check a parked pad's presence (stock auto-connect adoption).
+    PresenceCheck,
 }
 
 struct PadMachine {
@@ -328,15 +334,30 @@ impl Supervisor {
     fn drive_pad(&mut self, address: &BdAddr, notifications: &mut Vec<Notification>) {
         let now = self.now;
 
-        // Scheduled connect work first. (Health checks are owned by the
-        // Connected branch below — the tuple is consumed there.)
-        let connect_due = matches!(
-            self.pads.get(address).map(|m| m.scheduled),
-            Some(Some((Scheduled::Connect, at))) if now >= at
-        );
-        if connect_due {
-            self.begin_connect(address, notifications);
-            return;
+        // Scheduled work: connects first, then parked-presence watches.
+        // (Health checks are owned by the Connected branch below — the
+        // tuple is consumed there.)
+        match self.pads.get(address).map(|m| m.scheduled) {
+            Some(Some((Scheduled::Connect, at))) if now >= at => {
+                self.begin_connect(address, notifications);
+                return;
+            }
+            Some(Some((Scheduled::PresenceCheck, at))) if now >= at => {
+                // The stock path's pad-initiated accept: if the stack now
+                // reports the pad connected (it auto-connects woken
+                // paired pads), adopt the live session; otherwise keep
+                // watching.
+                if let Some(machine) = self.pads.get_mut(address) {
+                    machine.scheduled =
+                        Some((Scheduled::PresenceCheck, now + PARKED_PRESENCE_INTERVAL));
+                }
+                if self.stock.reports_connected(address) {
+                    tracing::debug!("parked pad {address} auto-connected at the stack; adopting");
+                    self.begin_connect(address, notifications);
+                    return;
+                }
+            }
+            _ => {}
         }
 
         // Stock sessions health-check by presence-consistency: the
@@ -497,9 +518,12 @@ impl Supervisor {
                     machine.scheduled = Some((Scheduled::Connect, now + delay));
                 }
                 None => {
-                    // Budget spent: park in Paired with the failure visible.
+                    // Budget spent: park in Paired with the failure visible
+                    // — and keep a slow presence watch so a pad the stack
+                    // auto-connects on wake is adopted (user story 16).
                     machine.phase = PadPhase::Paired;
-                    machine.scheduled = None;
+                    machine.scheduled =
+                        Some((Scheduled::PresenceCheck, now + PARKED_PRESENCE_INTERVAL));
                 }
             }
         }
