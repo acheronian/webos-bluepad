@@ -80,3 +80,11 @@ _Avoid_: Calling it a release (it installs nothing)
 **Acceptance matrix**:
 The five end-to-end scenarios (S1–S5) that define "reliable" for the connection layer, every one requiring input flowing in a streaming app: per-device reconnect resilience, truthful connect state, simultaneous pads, and silent-failure auto-recovery, cross-cut by pad sleep, TV standby, and app restart. The outer gate the shipped app must pass — as distinct from substrate probes and baselines recorded before the app exists.
 _Avoid_: Calling any pre-app probe run "acceptance"
+
+**Diagnostics bundle**:
+The packaged artifact the app itself assembles when a user exports diagnostics: rotated daemon and UI logs, an environment snapshot (versions, privilege tier, probed capabilities), health counters, and an anonymized pad registry summary — everything a maintainer needs to triage a report, producible with no SSH.
+_Avoid_: Calling it "the logs" (it is more than logs), or a bug report (it feeds one, it isn't one)
+
+**Radio status**:
+The curated, closed set of health signals the radio-status card renders — daemon liveness and tier, adapter presence and activity, contention and discovery state, and the aggregate pad summary — pushed over the UI↔daemon seam, never scraped from logs.
+_Avoid_: Raw log tailing in the UI
