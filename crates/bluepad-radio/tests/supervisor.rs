@@ -258,6 +258,59 @@ fn forget_is_the_only_removal_and_deletes_settings() {
 }
 
 #[test]
+fn forget_tears_down_at_the_stack() {
+    // Forget must also remove the pad at the stack — hid/disconnect then
+    // adapter/unpair — or the pad is re-adopted on wake, silently undoing
+    // Forget (#36; captured live: a forgotten pad reconnected to the TV
+    // immediately on controller restart).
+    let mut h = harness_with_registry(vec![stock_entry(1)]);
+    let a = addr(1);
+    // The stack's trust for an adopted pad: registry adoption doesn't
+    // create it — script it, the way a real TV would already have it.
+    h.radio.stock_paired(FakeRadio::dualsense("a0:fa:9c:62:7d:01"));
+    let start = Instant::now();
+    h.supervisor.reconcile(start);
+    settle(&mut h.supervisor, start);
+    assert_eq!(phase_of(&h.supervisor, &a), PadPhase::Connected);
+    assert!(h.radio.is_paired(&a), "stack trusts the pad before Forget");
+    assert!(h.radio.stock_connected(&a), "stack session up before Forget");
+
+    h.supervisor.forget(&a).unwrap();
+
+    assert!(!h.radio.is_paired(&a), "stack trust removed (adapter/unpair)");
+    assert!(!h.radio.stock_connected(&a), "stack session dropped (hid/disconnect)");
+}
+
+#[test]
+fn forget_fails_honestly_when_the_stack_refuses_unpair() {
+    // A refused unpair aborts Forget with the registry intact — removing
+    // the entry anyway would leave a stack-paired pad that gets silently
+    // re-adopted on the next scan.
+    let mut h = harness_with_registry(vec![stock_entry(2)]);
+    let a = addr(2);
+    h.radio.stock_paired(FakeRadio::dualsense("a0:fa:9c:62:7d:02"));
+    let start = Instant::now();
+    h.supervisor.reconcile(start);
+    settle(&mut h.supervisor, start);
+    h.radio.make_unpair_fail();
+
+    let outcome = h.supervisor.forget(&a);
+
+    assert!(outcome.is_err(), "refused unpair surfaces as an error");
+    assert!(
+        h.radio.is_paired(&a),
+        "the stack's trust is untouched by the refusal"
+    );
+    assert_eq!(
+        PadRegistry::load(h.dir.join("registry.json"))
+            .entries()
+            .count(),
+        1,
+        "registry entry survives a failed Forget"
+    );
+}
+
+#[test]
 fn contention_blocks_pairing_with_a_named_reason() {
     // While a contending service is live, pairing is blocked with a named
     // reason (story 38).

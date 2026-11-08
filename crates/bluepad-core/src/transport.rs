@@ -89,6 +89,17 @@ pub trait StockTransport: Send {
     /// Cancel an in-flight pairing attempt.
     fn cancel_pairing(&mut self, address: &BdAddr);
 
+    /// Drop the stack's HID session for this pad (`hid/disconnect`) —
+    /// best-effort teardown before unpairing (legacy order).
+    fn disconnect(&mut self, address: &BdAddr);
+
+    /// Remove the pad's trust at the stack (`adapter/unpair`) — the
+    /// stack-side half of Forget. Must fail honestly: the stack owns
+    /// trust for every connection path (stock pairing is trust
+    /// establishment), so a pad left stack-paired is re-adopted on wake,
+    /// silently undoing Forget.
+    fn unpair(&mut self, address: &BdAddr) -> Result<(), TransportError>;
+
     /// Connect through LG's stack. May return a session whose health must
     /// be verified before the pad counts as Connected.
     fn connect(&mut self, identity: &PadIdentity) -> Result<Box<dyn HidSession>, TransportError>;

@@ -192,6 +192,7 @@ struct RadioInner {
     discovery_calls: usize,
     sessions: HashMap<BdAddr, FakeSession>,
     stock_connected: HashSet<BdAddr>,
+    unpair_fails: bool,
 }
 
 /// The fake radio: one shared state behind both transport traits, with
@@ -293,6 +294,16 @@ impl FakeRadio {
         });
     }
 
+    /// Script the stack refusing adapter/unpair (radio down, hub wedged).
+    pub fn make_unpair_fail(&self) {
+        self.with(|r| r.unpair_fails = true);
+    }
+
+    /// Whether the stack currently holds the pad's HID session.
+    pub fn stock_connected(&self, address: &BdAddr) -> bool {
+        self.with(|r| r.stock_connected.contains(address))
+    }
+
     // -- Observation ----------------------------------------------------
 
     pub fn session(&self, address: &BdAddr) -> Option<FakeSession> {
@@ -351,6 +362,26 @@ impl StockTransport for FakeRadio {
     }
 
     fn cancel_pairing(&mut self, _address: &BdAddr) {}
+
+    fn disconnect(&mut self, address: &BdAddr) {
+        // hid/disconnect: the stack drops the pad's session.
+        self.with(|r| {
+            r.stock_connected.remove(address);
+        });
+    }
+
+    fn unpair(&mut self, address: &BdAddr) -> Result<(), TransportError> {
+        self.with(|r| {
+            if r.unpair_fails {
+                return Err(TransportError::new(
+                    FailureReason::RadioUnavailable,
+                    "scripted unpair refusal",
+                ));
+            }
+            r.paired.remove(address);
+            Ok(())
+        })
+    }
 
     fn connect(
         &mut self,

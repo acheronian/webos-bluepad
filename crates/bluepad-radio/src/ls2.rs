@@ -420,6 +420,34 @@ impl StockTransport for Ls2StockTransport {
         let _ = self.call("adapter/cancelPairing", &payload);
     }
 
+    fn disconnect(&mut self, address: &BdAddr) {
+        // hid/disconnect {address} — one-shot, best-effort (the legacy
+        // card's connect toggle; verified on-device by the pair probe).
+        let payload = serde_json::json!({ "address": address.colon() }).to_string();
+        let _ = self.call("hid/disconnect", &payload);
+    }
+
+    fn unpair(&mut self, address: &BdAddr) -> Result<(), TransportError> {
+        // adapter/unpair {address} — the stack-side half of Forget (the
+        // legacy card's Unpair; verified on-device by the pair probe).
+        // A refused unpair must surface: a pad left stack-paired is
+        // re-adopted on the next scan, silently undoing Forget.
+        let payload = serde_json::json!({ "address": address.colon() }).to_string();
+        let reply = self.call("adapter/unpair", &payload)?;
+        if reply
+            .get("returnValue")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+        {
+            Ok(())
+        } else {
+            Err(TransportError::new(
+                FailureReason::RadioUnavailable,
+                format!("adapter/unpair refused: {reply}"),
+            ))
+        }
+    }
+
     fn connect(
         &mut self,
         identity: &PadIdentity,

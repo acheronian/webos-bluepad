@@ -757,9 +757,23 @@ impl Supervisor {
         }
     }
 
-    /// Forget a pad: farewell pulse, teardown, registry + settings removal —
-    /// the only removal (user story 18).
+    /// Forget a pad: stack teardown (disconnect + unpair), farewell pulse,
+    /// registry + settings removal — the only removal (user story 18).
+    ///
+    /// The stack owns trust for every connection path (stock pairing is
+    /// trust establishment), so Forget must unpair there or the pad is
+    /// re-adopted on wake, silently undoing the removal (#36, captured
+    /// live: a forgotten pad reconnected to the TV on controller restart).
+    /// A refused unpair aborts before any local removal — the registry
+    /// entry survives, the failure surfaces over the seam.
     pub fn forget(&mut self, address: &BdAddr) -> std::io::Result<()> {
+        // Best-effort session drop first (the legacy card's order:
+        // disconnect, then unpair); a pad that isn't stack-connected
+        // simply refuses, harmlessly.
+        self.stock.disconnect(address);
+        self.stock.unpair(address).map_err(|e| {
+            std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+        })?;
         if let Some(mut machine) = self.pads.remove(address) {
             // Farewell pulse, if the pad can feel it.
             if let Some(session) = machine.session.as_mut() {
