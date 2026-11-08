@@ -76,3 +76,7 @@ Another app's userspace service that competes with BluePad for pads or the radio
 **Tombstone manifest**:
 A release manifest whose only job is to announce that the channel it lives on is discontinued and to name the successor — the mechanism by which already-installed versions reroute their update check after the project moves hosts.
 _Avoid_: Calling it a release (it installs nothing)
+
+**Acceptance matrix**:
+The five end-to-end scenarios (S1–S5) that define "reliable" for the connection layer, every one requiring input flowing in a streaming app: per-device reconnect resilience, truthful connect state, simultaneous pads, and silent-failure auto-recovery, cross-cut by pad sleep, TV standby, and app restart. The outer gate the shipped app must pass — as distinct from substrate probes and baselines recorded before the app exists.
+_Avoid_: Calling any pre-app probe run "acceptance"
