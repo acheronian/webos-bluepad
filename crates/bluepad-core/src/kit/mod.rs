@@ -17,6 +17,7 @@ pub use parse::{Battery, PadInput, Reading};
 
 use crate::pad::{ConnectionPath, PadKind};
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 
 /// A standard gamepad button, at its authored descriptor ordinal.
 ///
@@ -237,7 +238,7 @@ impl PadKit {
             Button::R3,
         ] {
             out.push(Reading {
-                label: button.label(),
+                label: Cow::Borrowed(button.label()),
                 code: self.kernel_code(button),
                 value: u16::from(input.pressed(button)),
             });
@@ -250,7 +251,7 @@ impl PadKit {
             ("D-pad right", hat_x, u16::from(input.hat == 2)),
         ] {
             out.push(Reading {
-                label,
+                label: Cow::Borrowed(label),
                 code: Some(code),
                 value,
             });
@@ -265,14 +266,14 @@ impl PadKit {
             ("R2", a.triggers.1, input.r2),
         ] {
             out.push(Reading {
-                label,
+                label: Cow::Borrowed(label),
                 code: Some(code),
                 value,
             });
         }
         if let Some(battery) = input.battery {
             out.push(Reading {
-                label: "Battery",
+                label: Cow::Borrowed("Battery"),
                 code: None,
                 value: battery.percent as u16,
             });

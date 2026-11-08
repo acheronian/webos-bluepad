@@ -38,9 +38,13 @@ impl Backoff {
         }
     }
 
-    /// Next delay, or `None` once the attempt budget is spent.
+    /// Delay before the next retry, or `None` once the attempt budget is
+    /// spent. The budget counts *attempts*, not retries: with
+    /// `max_attempts = 5`, the fifth failed attempt parks the pad.
     pub fn next_delay(&mut self) -> Option<Duration> {
-        if self.attempts >= self.policy.max_attempts {
+        if self.attempts + 1 >= self.policy.max_attempts {
+            // This call follows the last permitted attempt.
+            self.attempts = self.policy.max_attempts;
             return None;
         }
         self.attempts += 1;
@@ -72,12 +76,14 @@ mod tests {
 
     #[test]
     fn delays_grow_exponentially_and_stop_at_the_budget() {
+        // Five attempts total: the first four failures schedule retries
+        // (1, 2, 4, 8 s), the fifth parks the pad.
         let mut b = Backoff::new(BackoffPolicy::default());
+        ;
         assert_eq!(b.next_delay(), Some(Duration::from_secs(1)));
         assert_eq!(b.next_delay(), Some(Duration::from_secs(2)));
         assert_eq!(b.next_delay(), Some(Duration::from_secs(4)));
         assert_eq!(b.next_delay(), Some(Duration::from_secs(8)));
-        assert_eq!(b.next_delay(), Some(Duration::from_secs(16)));
         assert_eq!(b.next_delay(), None, "budget spent — park in Paired");
     }
 
@@ -98,7 +104,6 @@ mod tests {
                 Duration::from_secs(4),
                 Duration::from_secs(8),
                 Duration::from_secs(16),
-                Duration::from_secs(30),
                 Duration::from_secs(30),
             ]
         );

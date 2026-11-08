@@ -6,9 +6,14 @@
 
 pub mod backoff;
 pub mod bdaddr;
+pub mod connection;
 pub mod failure;
 pub mod kit;
 pub mod pad;
+pub mod protocol;
+pub mod registry;
+pub mod settings;
+pub mod transport;
 
 pub use bdaddr::BdAddr;
 pub use pad::{ConnectionPath, PadIdentity, PadKind, PadPhase, SupportTier};

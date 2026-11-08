@@ -3,6 +3,7 @@
 
 /// Standard CRC-32 (IEEE 802.3): reflected register from 0xFFFFFFFF with
 /// final inversion — the value `crc32_le(0xFFFFFFFF, data)` yields.
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn crc32(data: &[u8]) -> u32 {
     !crc32_running(0xFFFF_FFFF, data)
 }

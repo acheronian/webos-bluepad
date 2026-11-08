@@ -10,6 +10,7 @@
 
 use super::{Button, PadKind};
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 
 /// Pad battery as parsed from input reports.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -43,9 +44,9 @@ impl PadInput {
 
 /// One control reading for the pad diagnostic: interpreted label, raw code
 /// (where the authored layout knows it), value.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Reading {
-    pub label: &'static str,
+    pub label: Cow<'static, str>,
     pub code: Option<u16>,
     pub value: u16,
 }
