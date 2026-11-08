@@ -249,6 +249,13 @@ impl Supervisor {
                     .map(|w| now >= w.deadline)
                     .unwrap_or(false);
                 if let Some(identity) = self.stock.discovered().into_iter().next() {
+                    // Pair with discovery OFF — the legacy app's proven
+                    // flow (its search auto-cancels after 20 s and the user
+                    // pairs from the list afterwards). Paging a pad while
+                    // an inquiry scan runs is silently ignored by the
+                    // stack: the adapter/pair subscription is accepted but
+                    // zero events ever arrive (captured on the TV).
+                    self.stock.stop_discovery();
                     self.pairing_candidate(identity, now);
                     self.notify_pairing(notifications);
                 } else if expired {
