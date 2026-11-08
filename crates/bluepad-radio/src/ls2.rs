@@ -117,10 +117,22 @@ impl Ls2StockTransport {
     }
 
     /// Open the pairable gate (see `pairable_gate`). Incoming events are
-    /// drained and logged; the child stays alive until the window closes.
+    /// drained and logged; the child is held for the daemon's lifetime.
+    /// A dead child (e.g. the slot was taken — errorCode 104 — and
+    /// luna-send exited) is respawned on the next attempt: a stale dead
+    /// gate must never silently disable pairing.
     fn open_pairable_gate(&mut self) {
-        if self.pairable_gate.is_some() {
-            return;
+        if let Some(child) = self.pairable_gate.as_mut() {
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    tracing::warn!(
+                        "pairable gate died earlier ({status}); re-opening"
+                    );
+                    self.pairable_gate = None;
+                }
+                Ok(None) => return, // still alive and holding the slot
+                Err(_) => return,
+            }
         }
         let uri = format!("{SERVICE}/adapter/awaitPairingRequests");
         let child = Command::new(&self.sender)
