@@ -18,6 +18,7 @@ use bluepad_core::kit::PadInput;
 use bluepad_core::pad::{ConnectionPath, PadIdentity};
 use bluepad_core::transport::{HidSession, StockTransport, TransportError};
 use std::process::Command;
+use std::time::Duration;
 
 /// The service URI prefix.
 const SERVICE: &str = "luna://com.webos.service.bluetooth2";
@@ -133,7 +134,10 @@ impl StockTransport for Ls2StockTransport {
     }
 
     fn stop_discovery(&mut self) {
-        let _ = self.call("adapter/stopDiscovery", "{}");
+        // webos-typings + the legacy app: adapter/cancelDiscovery
+        // ("returnValue will always contain true, even if there is no
+        // active discovery scan").
+        let _ = self.call("adapter/cancelDiscovery", "{}");
     }
 
     fn discovered(&mut self) -> Vec<PadIdentity> {
@@ -202,25 +206,87 @@ impl StockTransport for Ls2StockTransport {
     }
 
     fn pair(&mut self, identity: &PadIdentity) -> Result<(), TransportError> {
+        // adapter/pair is a *subscription* (webos-typings: "The caller
+        // must subscribe to this method"): the stack pushes
+        // displayPinCode / displayPasskey / confirmPasskey UI steps, and
+        // the outcome arrives as a request:endPairing event — the exact
+        // flow the legacy app's DeviceFinder implemented and this TV
+        // accepted for all three DualSense revisions. Gamepads pair
+        // without passkey prompts in practice. (`adapter/pairDevice`
+        // does not exist — captured on the TV.)
         let payload = serde_json::json!({
             "address": identity.address.to_string(),
-            "pairingType": "HID",
+            "subscribe": true,
         })
         .to_string();
-        let reply = self.call("adapter/pairDevice", &payload)?;
-        if reply.get("returnValue").and_then(|v| v.as_bool()).unwrap_or(false) {
-            Ok(())
-        } else {
-            // NOTE: `adapter/pairDevice` does not exist on webOS 4.10 —
-            // the on-TV smoke test captured: Unknown method "pairDevice"
-            // for category "/adapter". The verified method (ticket #32)
-            // lands here; until then the refusal surfaces honestly with
-            // the stack's own reply as detail.
-            Err(TransportError::new(
-                FailureReason::InternalError,
-                format!("pairDevice refused: {reply}"),
-            ))
+        let uri = format!("{SERVICE}/adapter/pair");
+        let mut child = Command::new(&self.sender)
+            .arg("-i")
+            .arg(&uri)
+            .arg(&payload)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .map_err(|e| {
+                TransportError::new(
+                    FailureReason::RadioUnavailable,
+                    format!("cannot reach bluetooth2 ({e})"),
+                )
+            })?;
+        let stdout = child.stdout.take().expect("piped stdout");
+        let (tx, rx) = std::sync::mpsc::channel::<Option<String>>();
+        std::thread::spawn(move || {
+            use std::io::BufRead;
+            let reader = std::io::BufReader::new(stdout);
+            for line in reader.lines() {
+                match line {
+                    Ok(line) => {
+                        if tx.send(Some(line)).is_err() {
+                            break;
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+            let _ = tx.send(None);
+        });
+        // The supervisor's 30 s pair window bounds this; stop before it.
+        let deadline = std::time::Instant::now() + Duration::from_secs(25);
+        let mut last_event = String::new();
+        loop {
+            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+            let line = match rx.recv_timeout(remaining) {
+                Ok(Some(line)) => line,
+                Ok(None) | Err(_) => break,
+            };
+            last_event = line;
+            if let Ok(event) = serde_json::from_str::<serde_json::Value>(&last_event) {
+                let request = event.get("request").and_then(|r| r.as_str()).unwrap_or("");
+                if request == "endPairing" {
+                    let _ = child.kill();
+                    if event.get("returnValue").and_then(|v| v.as_bool()).unwrap_or(false) {
+                        return Ok(());
+                    }
+                    return Err(TransportError::new(
+                        FailureReason::PairingTimeout,
+                        format!("pairing refused: {event}"),
+                    ));
+                }
+            }
         }
+        let _ = child.kill();
+        Err(TransportError::new(
+            FailureReason::PairingTimeout,
+            format!(
+                "pairing window closed without endPairing (last event: {last_event})"
+            ),
+        ))
+    }
+
+    fn cancel_pairing(&mut self, address: &BdAddr) {
+        // adapter/cancelPairing {address} — one-shot, always succeeds.
+        let payload = serde_json::json!({ "address": address.to_string() }).to_string();
+        let _ = self.call("adapter/cancelPairing", &payload);
     }
 
     fn connect(

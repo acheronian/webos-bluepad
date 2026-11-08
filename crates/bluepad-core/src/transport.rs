@@ -86,6 +86,9 @@ pub trait StockTransport: Send {
     /// Establish trust (the one-time pairing).
     fn pair(&mut self, identity: &PadIdentity) -> Result<(), TransportError>;
 
+    /// Cancel an in-flight pairing attempt.
+    fn cancel_pairing(&mut self, address: &BdAddr);
+
     /// Connect through LG's stack. May return a session whose health must
     /// be verified before the pad counts as Connected.
     fn connect(&mut self, identity: &PadIdentity) -> Result<Box<dyn HidSession>, TransportError>;

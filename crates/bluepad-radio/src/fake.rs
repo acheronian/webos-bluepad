@@ -350,6 +350,8 @@ impl StockTransport for FakeRadio {
         })
     }
 
+    fn cancel_pairing(&mut self, _address: &BdAddr) {}
+
     fn connect(
         &mut self,
         identity: &PadIdentity,

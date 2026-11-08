@@ -741,6 +741,10 @@ impl Supervisor {
     pub fn cancel_pairing(&mut self, now: Instant) {
         self.now = now;
         if let Some(window) = &mut self.pairing {
+            // Cancel any in-flight pair attempt, then stop discovery.
+            if let PairingProgress::Pairing(identity) = &window.phase {
+                self.stock.cancel_pairing(&identity.address);
+            }
             self.stock.stop_discovery();
             window.phase = PairingProgress::Cancelled;
         }
