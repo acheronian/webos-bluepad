@@ -37,6 +37,12 @@ pub struct Ls2StockTransport {
     /// health check is presence-consistency against the live radio, not a
     /// snapshot taken at connect time.
     presence: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<BdAddr, bool>>>,
+    /// The pairable-gate subscription (adapter/awaitPairingRequests),
+    /// held while a pairing window is open. The stack is only pairable
+    /// while a client subscribes (webos-typings); the legacy app holds
+    /// this subscription for its whole lifetime — pads then pair via the
+    /// incoming flow, completing without any outgoing call.
+    pairable_gate: Option<std::process::Child>,
 }
 
 impl Ls2StockTransport {
@@ -46,6 +52,7 @@ impl Ls2StockTransport {
             presence: std::sync::Arc::new(std::sync::Mutex::new(
                 std::collections::HashMap::new(),
             )),
+            pairable_gate: None,
         }
     }
 
@@ -108,12 +115,61 @@ impl Ls2StockTransport {
                     .unwrap_or(false)
             }))
     }
+
+    /// Open the pairable gate (see `pairable_gate`). Incoming events are
+    /// drained and logged; the child stays alive until the window closes.
+    fn open_pairable_gate(&mut self) {
+        if self.pairable_gate.is_some() {
+            return;
+        }
+        let uri = format!("{SERVICE}/adapter/awaitPairingRequests");
+        let child = Command::new(&self.sender)
+            .arg("-i")
+            .arg(&uri)
+            .arg("{\"subscribe\":true}")
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn();
+        match child {
+            Ok(mut child) => {
+                if let Some(stdout) = child.stdout.take() {
+                    std::thread::spawn(move || {
+                        use std::io::BufRead;
+                        for line in std::io::BufReader::new(stdout).lines() {
+                            match line {
+                                Ok(line) => tracing::debug!("awaitPairingRequests: {line}"),
+                                Err(_) => break,
+                            }
+                        }
+                    });
+                }
+                self.pairable_gate = Some(child);
+            }
+            Err(e) => {
+                tracing::debug!("awaitPairingRequests gate failed to open: {e}");
+            }
+        }
+    }
+
+    fn close_pairable_gate(&mut self) {
+        if let Some(mut child) = self.pairable_gate.take() {
+            let _ = child.kill();
+        }
+    }
+
+    fn device_is_paired(&mut self, address: &BdAddr) -> Option<bool> {
+        self.find_device(address)
+            .ok()
+            .flatten()
+            .and_then(|d| d.get("paired").and_then(|p| p.as_bool()))
+    }
 }
 
 impl Default for Ls2StockTransport {
     fn default() -> Self {
         Self::new()
     }
+
 }
 
 impl StockTransport for Ls2StockTransport {
@@ -122,6 +178,12 @@ impl StockTransport for Ls2StockTransport {
     }
 
     fn start_discovery(&mut self) -> Result<(), TransportError> {
+        // Open the pairable gate for the window: without an
+        // awaitPairingRequests subscriber the adapter is not pairable
+        // (webos-typings: pairable is "initially false and set to true
+        // when client is subscribed to adapter/awaitPairingRequests").
+        // Incoming pairing events are logged at debug for observability.
+        self.open_pairable_gate();
         let reply = self.call("adapter/startDiscovery", "{}")?;
         if reply.get("returnValue").and_then(|v| v.as_bool()).unwrap_or(false) {
             Ok(())
@@ -138,6 +200,7 @@ impl StockTransport for Ls2StockTransport {
         // ("returnValue will always contain true, even if there is no
         // active discovery scan").
         let _ = self.call("adapter/cancelDiscovery", "{}");
+        self.close_pairable_gate();
     }
 
     fn discovered(&mut self) -> Vec<PadIdentity> {
@@ -206,6 +269,17 @@ impl StockTransport for Ls2StockTransport {
     }
 
     fn pair(&mut self, identity: &PadIdentity) -> Result<(), TransportError> {
+        // Already paired? The incoming flow can complete before the
+        // outgoing call even starts (or the pad paired itself while the
+        // gate was open).
+        if self.device_is_paired(&identity.address) == Some(true) {
+            return Ok(());
+        }
+        // Both flows run concurrently:
+        // - outgoing: adapter/pair subscription ends with request:endPairing
+        // - incoming: the gate lets the pad pair itself; completion is the
+        //   paired field flipping true in device/getStatus (webos-typings
+        //   instructs monitoring it exactly so)
         // adapter/pair is a *subscription* (webos-typings: "The caller
         // must subscribe to this method"): the stack pushes
         // displayPinCode / displayPasskey / confirmPasskey UI steps, and
@@ -251,26 +325,51 @@ impl StockTransport for Ls2StockTransport {
             let _ = tx.send(None);
         });
         // The supervisor's 30 s pair window bounds this; stop before it.
+        // Events are checked with a short poll so the incoming flow's
+        // completion (paired flipping true) is noticed too.
         let deadline = std::time::Instant::now() + Duration::from_secs(25);
         let mut last_event = String::new();
         loop {
             let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-            let line = match rx.recv_timeout(remaining) {
-                Ok(Some(line)) => line,
-                Ok(None) | Err(_) => break,
-            };
-            last_event = line;
-            if let Ok(event) = serde_json::from_str::<serde_json::Value>(&last_event) {
-                let request = event.get("request").and_then(|r| r.as_str()).unwrap_or("");
-                if request == "endPairing" {
-                    let _ = child.kill();
-                    if event.get("returnValue").and_then(|v| v.as_bool()).unwrap_or(false) {
+            if remaining.is_zero() {
+                break;
+            }
+            let poll = remaining.min(Duration::from_secs(2));
+            match rx.recv_timeout(poll) {
+                Ok(Some(line)) => {
+                    last_event = line;
+                    if let Ok(event) =
+                        serde_json::from_str::<serde_json::Value>(&last_event)
+                    {
+                        let request =
+                            event.get("request").and_then(|r| r.as_str()).unwrap_or("");
+                        if request == "endPairing" {
+                            let _ = child.kill();
+                            if event
+                                .get("returnValue")
+                                .and_then(|v| v.as_bool())
+                                .unwrap_or(false)
+                            {
+                                return Ok(());
+                            }
+                            return Err(TransportError::new(
+                                FailureReason::PairingTimeout,
+                                format!("pairing refused: {event}"),
+                            ));
+                        }
+                    }
+                }
+                Ok(None) => break,
+                Err(_) => {
+                    // No event within the poll: check the incoming flow.
+                    if self.device_is_paired(&identity.address) == Some(true) {
+                        let _ = child.kill();
+                        tracing::debug!(
+                            "pad {} paired via the incoming flow",
+                            identity.address
+                        );
                         return Ok(());
                     }
-                    return Err(TransportError::new(
-                        FailureReason::PairingTimeout,
-                        format!("pairing refused: {event}"),
-                    ));
                 }
             }
         }
@@ -278,7 +377,7 @@ impl StockTransport for Ls2StockTransport {
         Err(TransportError::new(
             FailureReason::PairingTimeout,
             format!(
-                "pairing window closed without endPairing (last event: {last_event})"
+                "pairing window closed without completion (last event: {last_event})"
             ),
         ))
     }
