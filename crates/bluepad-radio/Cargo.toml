@@ -9,3 +9,4 @@ license.workspace = true
 bluepad-core = { workspace = true }
 libc = "0.2"
 serde_json = { workspace = true }
+tracing = "0.1"

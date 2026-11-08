@@ -30,6 +30,7 @@ dependencies = [
  "bluepad-core",
  "libc",
  "serde_json",
+ "tracing",
 ]
 
 [[package]]

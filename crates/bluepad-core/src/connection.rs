@@ -899,7 +899,12 @@ impl Supervisor {
         RadioStatus {
             tier: self.tier,
             adapter: AdapterState::Idle, // the shell refreshes from transports
-            discovery: if self.pairing.is_some() {
+            discovery: if self
+                .pairing
+                .as_ref()
+                .map(|w| !w.phase.is_terminal())
+                .unwrap_or(false)
+            {
                 DiscoveryState::Discovering
             } else {
                 DiscoveryState::Idle
