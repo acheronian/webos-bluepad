@@ -328,26 +328,31 @@ impl Supervisor {
     fn drive_pad(&mut self, address: &BdAddr, notifications: &mut Vec<Notification>) {
         let now = self.now;
 
-        // Scheduled work first.
-        let due = match self.pads.get(address).map(|m| m.scheduled) {
-            Some(Some((Scheduled::Connect, at))) if now >= at => Some(Scheduled::Connect),
-            Some(Some((Scheduled::HealthCheck, at))) if now >= at => {
-                Some(Scheduled::HealthCheck)
-            }
-            _ => None,
-        };
-        match due {
-            Some(Scheduled::Connect) => {
-                self.begin_connect(address, notifications);
-                return;
-            }
-            Some(Scheduled::HealthCheck) => {
-                if let Some(machine) = self.pads.get_mut(address) {
-                    machine.scheduled = None;
-                }
-            }
-            None => {}
+        // Scheduled connect work first. (Health checks are owned by the
+        // Connected branch below — the tuple is consumed there.)
+        let connect_due = matches!(
+            self.pads.get(address).map(|m| m.scheduled),
+            Some(Some((Scheduled::Connect, at))) if now >= at
+        );
+        if connect_due {
+            self.begin_connect(address, notifications);
+            return;
         }
+
+        // Stock sessions health-check by presence-consistency: the
+        // supervisor asks the stack's live view (this also refreshes the
+        // adapter's shared presence map). App-owned sessions check input
+        // flow.
+        let is_stock = self
+            .pads
+            .get(address)
+            .and_then(|m| m.session.as_ref())
+            .map(|s| s.path() == ConnectionPath::Stock)
+            .unwrap_or(false);
+        let health_due = matches!(
+            self.pads.get(address).map(|m| m.scheduled),
+            Some(Some((Scheduled::HealthCheck, at))) if self.now >= at
+        );
 
         // Phase transitions.
         let phase = match self.pads.get(address) {
@@ -356,13 +361,25 @@ impl Supervisor {
         };
         match phase {
             PadPhase::Connecting => {
-                let verdict = self.pads[address].health();
+                let verdict = if is_stock {
+                    if self.stock.reports_connected(address) {
+                        HealthVerdict::Healthy
+                    } else {
+                        HealthVerdict::Lost
+                    }
+                } else {
+                    self.pads[address].health()
+                };
                 match verdict {
                     HealthVerdict::Healthy => {
                         if let Some(machine) = self.pads.get_mut(address) {
                             machine.phase = PadPhase::Connected;
                             machine.failure = None;
                             machine.backoff.reset();
+                            // The first health check runs one interval
+                            // after Connected is earned.
+                            machine.scheduled =
+                                Some((Scheduled::HealthCheck, now + HEALTH_CHECK_INTERVAL));
                         }
                         self.assign_player_index(address);
                         let _ = self.send_feedback_pulse(address);
@@ -384,7 +401,22 @@ impl Supervisor {
                 }
             }
             PadPhase::Connected => {
-                let verdict = self.pads[address].health();
+                // Health checks run on the scheduled cadence (the stock
+                // presence poll spawns a subprocess — not every tick);
+                // the input drain below still runs every poll.
+                if health_due {
+                    if let Some(machine) = self.pads.get_mut(address) {
+                        machine.scheduled = None;
+                    }
+                    let verdict = if is_stock {
+                        if self.stock.reports_connected(address) {
+                            HealthVerdict::Healthy
+                        } else {
+                            HealthVerdict::Lost
+                        }
+                    } else {
+                        self.pads[address].health()
+                    };
                 match verdict {
                     HealthVerdict::Healthy => {
                         if let Some(machine) = self.pads.get_mut(address) {
@@ -417,6 +449,7 @@ impl Supervisor {
                         notifications.push(self.notify_pad(address));
                     }
                 }
+                } // health_due
             }
             _ => {}
         }
@@ -844,6 +877,9 @@ impl Supervisor {
             return Err(Failure::new(FailureReason::InternalError, e.to_string()));
         }
         if let Some(machine) = self.pads.get_mut(address) {
+            // A user-initiated adoption deserves a fresh recovery budget.
+            machine.backoff.reset();
+            machine.failure = None;
             machine.scheduled = Some((Scheduled::Connect, now));
         }
         Ok(identity)

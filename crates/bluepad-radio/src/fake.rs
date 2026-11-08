@@ -145,6 +145,40 @@ impl HidSession for FakeSession {
     }
 }
 
+/// A stock watch session: health is presence-consistency against the
+/// radio's live connected-set — mirroring the ls2 adapter's design so the
+/// supervisor's presence refresh is exercised in tests.
+#[derive(Clone)]
+pub struct FakeStockWatch {
+    inner: Arc<Mutex<RadioInner>>,
+    address: BdAddr,
+}
+
+impl HidSession for FakeStockWatch {
+    fn path(&self) -> ConnectionPath {
+        ConnectionPath::Stock
+    }
+
+    fn poll_input(&mut self) -> Result<Option<PadInput>, TransportError> {
+        Ok(None)
+    }
+
+    fn write_output(&mut self, _report: &[u8]) -> Result<(), TransportError> {
+        Err(TransportError::new(
+            FailureReason::UnsupportedCombination,
+            "stock sessions cannot send outputs",
+        ))
+    }
+
+    fn input_flowing(&self) -> bool {
+        self.inner.lock().unwrap().stock_connected.contains(&self.address)
+    }
+
+    fn close(&mut self) -> Result<(), TransportError> {
+        Ok(())
+    }
+}
+
 #[derive(Default)]
 struct RadioInner {
     adapter_present: bool,
@@ -244,13 +278,18 @@ impl FakeRadio {
         });
     }
 
-    /// Simulate the stock stack dropping a pad (standby).
+    /// Simulate the stock stack dropping a pad (standby): the stack's
+    /// connected-view flips; the watch session follows by itself.
     pub fn stock_drops(&self, address: &BdAddr) {
         self.with(|r| {
             r.stock_connected.remove(address);
-            if let Some(s) = r.sessions.get(address) {
-                s.go_silent();
-            }
+        });
+    }
+
+    /// Simulate the stack reconnecting a pad on its own (adopt-by-stack).
+    pub fn stock_reconnects(&self, address: &BdAddr) {
+        self.with(|r| {
+            r.stock_connected.insert(*address);
         });
     }
 
@@ -319,21 +358,27 @@ impl StockTransport for FakeRadio {
         if let Some(injected) = injected {
             match injected {
                 Injected::Silent => {
-                    let session = FakeSession::silent(ConnectionPath::Stock);
+                    // hid/connect "succeeded" but the stack never reports
+                    // the pad connected: presence stays false.
+                    let session = FakeStockWatch {
+                        inner: self.inner.clone(),
+                        address: identity.address,
+                    };
                     self.with(|r| {
-                        r.sessions.insert(identity.address, session.clone());
+                        r.sessions.insert(identity.address, FakeSession::silent(ConnectionPath::Stock));
                     });
                     return Ok(Box::new(session));
                 }
                 other => return Err(other.transport_error()),
             }
         }
-        let session = FakeSession::flowing(ConnectionPath::Stock);
         self.with(|r| {
             r.stock_connected.insert(identity.address);
-            r.sessions.insert(identity.address, session.clone());
         });
-        Ok(Box::new(session))
+        Ok(Box::new(FakeStockWatch {
+            inner: self.inner.clone(),
+            address: identity.address,
+        }))
     }
 
     fn reports_connected(&mut self, address: &BdAddr) -> bool {

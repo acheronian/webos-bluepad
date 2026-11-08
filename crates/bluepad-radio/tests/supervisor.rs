@@ -501,3 +501,74 @@ fn pairing_window_reopens_after_failure() {
         .start_pairing(start + Duration::from_secs(120))
         .expect("pairing window reopens after a terminal outcome");
 }
+
+#[test]
+fn stock_health_is_presence_consistency_not_a_snapshot() {
+    // The stack's live view decides: a stock pad the stack drops goes
+    // Recovering on the health-check cadence — the session is never a
+    // connect-time snapshot (the on-TV smoke test surfaced this).
+    let mut h = harness_with_registry(vec![stock_entry(1)]);
+    let start = Instant::now();
+    h.supervisor.reconcile(start);
+    settle(&mut h.supervisor, start);
+    assert_eq!(phase_of(&h.supervisor, &addr(1)), PadPhase::Connected);
+
+    // The stack drops the pad (standby). The watch session's presence is
+    // now false; the supervisor notices on the health-check cadence.
+    h.radio.stock_drops(&addr(1));
+    h.supervisor.poll(start + Duration::from_secs(3));
+    h.supervisor.poll(start + Duration::from_secs(3));
+    assert_eq!(
+        phase_of(&h.supervisor, &addr(1)),
+        PadPhase::Recovering,
+        "dropped presence must not stay Connected"
+    );
+    let status = h
+        .supervisor
+        .state()
+        .pads
+        .iter()
+        .find(|p| p.address == addr(1))
+        .unwrap()
+        .clone();
+    assert_eq!(status.failure.as_ref().unwrap().reason, FailureReason::SessionLost);
+}
+
+#[test]
+fn adopt_resets_the_recovery_budget() {
+    // The on-TV run showed a second adopt getting a single attempt (the
+    // budget was spent). A user-initiated adoption deserves a fresh one.
+    let mut h = harness_with_registry(vec![]);
+    let identity = FakeRadio::dualsense("a0:fa:9c:62:7d:01");
+    h.radio.stock_paired(identity);
+    let a = addr(1);
+    h.supervisor.adopt_paired(&a, Instant::now()).unwrap();
+    let start = Instant::now();
+    // Spend the whole budget on failures. The entry is unproven, so the
+    // app-owned path is tried first and falls back to stock — both must
+    // fail for the pad to park.
+    h.radio
+        .inject_app_owned(&a, vec![bluepad_radio::fake::Injected::StackTimeout; 5]);
+    h.radio
+        .inject_stock(&a, vec![bluepad_radio::fake::Injected::StackTimeout; 5]);
+    for second in [0u64, 1, 3, 7, 15] {
+        h.supervisor.poll(start + Duration::from_secs(second));
+        h.supervisor.poll(start + Duration::from_secs(second));
+    }
+    assert_eq!(phase_of(&h.supervisor, &addr(1)), PadPhase::Paired, "parked");
+    // Adopt again: fresh budget → a full new round of attempts.
+    h.radio
+        .inject_stock(&a, vec![bluepad_radio::fake::Injected::StackTimeout; 5]);
+    h.radio
+        .inject_app_owned(&a, vec![bluepad_radio::fake::Injected::StackTimeout; 5]);
+    h.radio
+        .inject_stock(&a, vec![bluepad_radio::fake::Injected::StackTimeout; 5]);
+    h.supervisor.adopt_paired(&a, start + Duration::from_secs(60)).unwrap();
+    h.supervisor.poll(start + Duration::from_secs(60));
+    h.supervisor.poll(start + Duration::from_secs(60));
+    assert_eq!(
+        phase_of(&h.supervisor, &addr(1)),
+        PadPhase::Recovering,
+        "fresh budget after user-initiated adopt"
+    );
+}

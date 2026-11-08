@@ -239,13 +239,19 @@ impl StockTransport for Ls2StockTransport {
                 presence: self.presence.clone(),
             }))
         } else {
-            // The error-129/130 family: map the stock error code to the
-            // curated reasons (revision research: 130 = stack died
-            // mid-handshake; 129 = auth/registry defect).
+            // Map the stock error codes to curated reasons:
+            // - 129: auth/registry defect (revision research) — re-pair
+            //   territory, the one honest suggestion.
+            // - 130: LG's HID session layer died mid-handshake (the
+            //   revision-B specimen).
+            // - 106: "Device with supplied address is not available" —
+            //   captured on the TV: the pad is not in radio contact
+            //   (asleep, off, or out of range).
             let code = reply.get("errorCode").and_then(|c| c.as_i64());
             let reason = match code {
                 Some(129) => FailureReason::AuthRejected,
                 Some(130) => FailureReason::StackTimeout,
+                Some(106) => FailureReason::PadUnreachable,
                 _ => FailureReason::PadUnreachable,
             };
             Err(TransportError::new(
