@@ -400,11 +400,11 @@ impl Supervisor {
                     }
                 }
             }
-            PadPhase::Connected => {
+            PadPhase::Connected
                 // Health checks run on the scheduled cadence (the stock
                 // presence poll spawns a subprocess — not every tick);
                 // the input drain below still runs every poll.
-                if health_due {
+                if health_due => {
                     if let Some(machine) = self.pads.get_mut(address) {
                         machine.scheduled = None;
                     }
@@ -450,7 +450,6 @@ impl Supervisor {
                     }
                 }
                 } // health_due
-            }
             _ => {}
         }
 
