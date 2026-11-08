@@ -1,0 +1,10 @@
+[package]
+name = "bluepad-radio"
+description = "BluePad radio transports: app-owned L2CAP + uhid, stock bluetooth2, fakes"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+bluepad-core = { workspace = true }
+libc = "0.2"

@@ -28,3 +28,6 @@ dist-ssr
 .agents
 # Probe artifacts (raw captures from on-TV probe runs)
 probe-logs
+
+# Rust
+/target
