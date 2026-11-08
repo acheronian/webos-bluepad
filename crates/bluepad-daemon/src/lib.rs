@@ -207,6 +207,7 @@ impl Daemon {
                 .await;
                 if let Ok(outcome) = outcome {
                     for notification in outcome.notifications {
+                        tracing::debug!("{notification:?}");
                         let _ = tx.send(notification);
                     }
                 }

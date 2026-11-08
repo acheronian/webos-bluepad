@@ -180,9 +180,17 @@ fn render_notification(notification: &Notification) -> String {
         Notification::RadioStatus(radio) => {
             format!("[radio] {} connected, {} reconnecting", radio.connected, radio.recovering)
         }
-        Notification::PadChanged(pad) => {
-            format!("[pad] {} {} — {}", pad.name, pad.address, pad.phase.label())
-        }
+        Notification::PadChanged(pad) => match &pad.failure {
+            Some(failure) => format!(
+                "[pad] {} {} — {} ({}: {})",
+                pad.name,
+                pad.address,
+                pad.phase.label(),
+                failure.reason.label(),
+                failure.detail
+            ),
+            None => format!("[pad] {} {} — {}", pad.name, pad.address, pad.phase.label()),
+        },
         Notification::PadRemoved { address } => format!("[pad] {address} forgotten"),
         Notification::PairingProgress(phase) => match phase {
             PairingProgress::Discovering => "[pairing] looking for pads…".into(),
