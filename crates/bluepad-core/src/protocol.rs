@@ -8,6 +8,7 @@
 //! access duty in protocol form.
 
 use crate::bdaddr::BdAddr;
+use crate::diagnostics::DiagnosticsBundle;
 use crate::failure::Failure;
 use crate::kit::{Battery, PlayerIndex, Reading};
 use crate::pad::{ConnectionPath, PadIdentity, PadKind, PadPhase};
@@ -16,7 +17,10 @@ use serde::{Deserialize, Serialize};
 
 /// The protocol version of this build. Bump on any breaking change to the
 /// message vocabulary.
-pub const PROTOCOL_VERSION: u32 = 1;
+///
+/// v2: the diagnostics-export surface — per-session input log and the
+/// anonymized bundle (issue #30).
+pub const PROTOCOL_VERSION: u32 = 2;
 
 /// The privilege tier the daemon actually probed — never assumed from the
 /// install method (glossary: Privilege tier).
@@ -89,6 +93,21 @@ pub struct PadStatus {
     pub diagnostic_available: bool,
 }
 
+/// One event in the per-session input log: a control changed → its
+/// interpreted label, raw code, and new value (spec: Pad diagnostic;
+/// user story 31 — the log downloadable from the pad diagnostic page).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SessionLogEntry {
+    /// 1-based, per-session: resets when a new session opens.
+    pub seq: u64,
+    /// Milliseconds since the session opened.
+    pub elapsed_ms: u64,
+    pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<u16>,
+    pub value: u16,
+}
+
 /// Pairing sheet state (modal, bounded).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -134,6 +153,11 @@ pub enum Capability {
     PadSettings,
     RumbleTest,
     Diagnostics,
+    /// The per-session input log downloadable from the pad diagnostic
+    /// page (user story 31).
+    SessionLog,
+    /// The anonymized diagnostics bundle (Settings → About → Export).
+    DiagnosticsExport,
     GlobalToggle,
 }
 
@@ -156,6 +180,12 @@ pub enum Request {
     RumbleTest { address: BdAddr },
     /// Current pad diagnostic readings (app-owned sessions only).
     GetDiagnostics { address: BdAddr },
+    /// The per-session input log: bounded control → code → value events
+    /// (app-owned sessions only; user story 31).
+    GetSessionLog { address: BdAddr },
+    /// Assemble the anonymized diagnostics bundle (Settings → About →
+    /// Export; user story 36).
+    ExportDiagnostics,
     /// Begin/extend the notification subscription (Observer).
     Subscribe,
     Unsubscribe,
@@ -175,6 +205,8 @@ pub enum Response {
     Ok,
     PadSettings(PadSettings),
     Diagnostics(Vec<Reading>),
+    SessionLog(Vec<SessionLogEntry>),
+    DiagnosticsBundle(DiagnosticsBundle),
     Error { message: String },
     /// The client speaks an incompatible protocol version.
     VersionMismatch { daemon_protocol_version: u32 },

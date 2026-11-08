@@ -68,6 +68,7 @@ impl Fixture {
         let daemon = bluepad_daemon::Daemon::bind_shared(
             self.supervisor.clone(),
             &self.socket_path,
+            &self.dir,
         )
         .unwrap();
         tokio::task::spawn(async move {
@@ -342,4 +343,151 @@ async fn forget_removes_the_pad_over_the_seam() {
             .count()
             == 0
     );
+}
+
+// ---------------------------------------------------------------------
+// Per-session input log over the seam (spec: Pad diagnostic; story 31).
+// ---------------------------------------------------------------------
+
+#[tokio::test]
+async fn session_log_is_retrievable_over_the_seam_for_app_owned_sessions() {
+    let f = Fixture::new(vec![dualsense_entry("a0:fa:9c:62:7d:01")], vec![]).await;
+    f.run_daemon().await;
+    // Let the poll loop reconcile + connect the registry pad.
+    tokio::time::sleep(Duration::from_millis(700)).await;
+    let mut client = Client::connect(&f.socket_path).await;
+    let address: BdAddr = "a0:fa:9c:62:7d:01".parse().unwrap();
+
+    // The capability is reflected so a newer UI can degrade gracefully.
+    match client
+        .request(Request::Hello {
+            protocol_version: PROTOCOL_VERSION,
+        })
+        .await
+    {
+        Response::Hello { capabilities, .. } => {
+            assert!(capabilities.contains(&Capability::SessionLog));
+        }
+        other => panic!("expected Hello, got {other:?}"),
+    }
+
+    // Script a press on the fake session; the daemon's poll loop records it.
+    let mut input = bluepad_core::kit::PadInput::default();
+    input.buttons |= bluepad_core::kit::Button::Cross.bit();
+    f.radio.session_serves(&address, input);
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    match client.request(Request::GetSessionLog { address }).await {
+        Response::SessionLog(entries) => {
+            let cross = entries
+                .iter()
+                .find(|e| e.label == "Cross")
+                .expect("the press crossed the seam");
+            assert_eq!(cross.code, Some(0x130));
+            assert_eq!(cross.value, 1);
+        }
+        other => panic!("expected SessionLog, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn session_log_refuses_stock_sessions_with_an_honest_error() {
+    let f = Fixture::new(
+        vec![RegistryEntry {
+            identity: FakeRadio::dualsense("a0:fa:9c:62:7d:01"),
+            kind: PadKind::DualSense,
+            proven_path: Some(bluepad_core::pad::ConnectionPath::Stock),
+            provenance: PairingProvenance::Stock,
+        }],
+        vec![],
+    )
+    .await;
+    f.run_daemon().await;
+    // The stack already holds the pad: the stock session is adopted.
+    let address: BdAddr = "a0:fa:9c:62:7d:01".parse().unwrap();
+    f.radio.stock_reconnects(&address);
+    tokio::time::sleep(Duration::from_millis(700)).await;
+    let mut client = Client::connect(&f.socket_path).await;
+    match client.request(Request::GetSessionLog { address }).await {
+        Response::Error { message } => {
+            assert!(message.contains("BluePad sessions"), "{message}")
+        }
+        other => panic!("expected Error, got {other:?}"),
+    }
+}
+
+// ---------------------------------------------------------------------
+// Diagnostics bundle export over the seam (spec: Diagnostics and
+// observability; user story 36).
+// ---------------------------------------------------------------------
+
+use bluepad_core::diagnostics::{BundleManifest, DiagnosticsBundle};
+
+#[tokio::test]
+async fn export_diagnostics_assembles_the_bundle_over_the_seam() {
+    let f = Fixture::new(vec![dualsense_entry("a0:fa:9c:62:7d:01")], vec![]).await;
+    // Rotated daemon logs exist on disk, tier-homed next to the socket —
+    // carrying the pad's MAC in every form the daemon logs it in.
+    std::fs::write(
+        f.dir.join("bluepad.log"),
+        "2026-01-01 daemon: pad a0:fa:9c:62:7d:01 (BdAddr(a0fa9c627d01)) connected\n",
+    )
+    .unwrap();
+    std::fs::write(f.dir.join("bluepad.log.1"), "2026-01-01 daemon: rotated\n").unwrap();
+    f.run_daemon().await;
+    // Let the poll loop reconcile + connect the registry pad.
+    tokio::time::sleep(Duration::from_millis(700)).await;
+    let mut client = Client::connect(&f.socket_path).await;
+
+    match client.request(Request::ExportDiagnostics).await {
+        Response::DiagnosticsBundle(DiagnosticsBundle { manifest, files }) => {
+            assert_eq!(manifest.schema_version, 1);
+            assert_eq!(manifest.app_version, env!("CARGO_PKG_VERSION"));
+            assert_eq!(manifest.tier, PrivilegeTier::Root);
+            assert_eq!(manifest.health.connected_now, 1, "the pad connected");
+            assert_eq!(manifest.pads.len(), 1);
+
+            // The rotated daemon logs ride along, newest and previous.
+            let names: Vec<&str> = files.iter().map(|f| f.name.as_str()).collect();
+            assert!(names.contains(&"logs/bluepad-daemon.log"), "{names:?}");
+            assert!(names.contains(&"logs/bluepad-daemon.log.1"), "{names:?}");
+            let latest = files.iter().find(|f| f.name == "logs/bluepad-daemon.log").unwrap();
+            let log = String::from_utf8(latest.content.clone()).unwrap();
+            assert!(log.contains("pad"), "the log line survives: {log}");
+            // Anonymization is part of the format: no MAC in the clear —
+            // not in the manifest, not in the logs.
+            assert!(!log.contains("a0:fa:9c:62:7d:01"), "{log}");
+            assert!(!log.contains("a0fa9c627d01"), "{log}");
+            assert!(log.contains("a0:fa:9c…"), "the pseudonym keeps the OUI: {log}");
+            let json = serde_json::to_string(&manifest).unwrap();
+            assert!(!json.contains("a0:fa:9c:62:7d"), "{json}");
+        }
+        other => panic!("expected DiagnosticsBundle, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn export_diagnostics_reflects_the_capability() {
+    let f = Fixture::new(vec![], vec![]).await;
+    f.run_daemon().await;
+    let mut client = Client::connect(&f.socket_path).await;
+    match client
+        .request(Request::Hello {
+            protocol_version: PROTOCOL_VERSION,
+        })
+        .await
+    {
+        Response::Hello { capabilities, .. } => {
+            assert!(capabilities.contains(&Capability::DiagnosticsExport));
+        }
+        other => panic!("expected Hello, got {other:?}"),
+    }
+    // The bundle is assemblable even with no pads and no logs.
+    match client.request(Request::ExportDiagnostics).await {
+        Response::DiagnosticsBundle(DiagnosticsBundle {
+            manifest: BundleManifest { pads, .. },
+            ..
+        }) => assert!(pads.is_empty()),
+        other => panic!("expected DiagnosticsBundle, got {other:?}"),
+    }
 }

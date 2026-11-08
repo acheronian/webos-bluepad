@@ -53,7 +53,7 @@ fn main() -> std::io::Result<()> {
         settings,
         tier,
     );
-    let daemon = bluepad_daemon::Daemon::bind(supervisor, socket_path())?;
+    let daemon = bluepad_daemon::Daemon::bind(supervisor, socket_path(), dir)?;
     tracing::info!("listening on {}", daemon.socket_path().display());
 
     let runtime = tokio::runtime::Runtime::new()?;

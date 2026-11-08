@@ -7,6 +7,7 @@
 pub mod backoff;
 pub mod bdaddr;
 pub mod connection;
+pub mod diagnostics;
 pub mod failure;
 pub mod kit;
 pub mod pad;

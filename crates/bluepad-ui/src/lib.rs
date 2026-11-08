@@ -6,6 +6,8 @@
 //! `DaemonClient` facade over the Unix-socket seam.
 
 pub mod client;
+pub mod export;
+pub mod ulog;
 pub mod update;
 pub mod view;
 

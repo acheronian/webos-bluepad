@@ -676,3 +676,169 @@ fn parked_stock_pad_is_adopted_when_the_stack_auto_connects_it() {
         "parked pad adopted after the stack auto-connected it"
     );
 }
+
+// ---------------------------------------------------------------------
+// Per-session input log (spec: Pad diagnostic; user story 31).
+// ---------------------------------------------------------------------
+
+use bluepad_core::kit::{Button, PadInput};
+
+fn press(button: Button) -> PadInput {
+    let mut input = PadInput::default();
+    input.buttons |= button.bit();
+    input
+}
+
+#[test]
+fn session_log_records_control_events_for_app_owned_sessions() {
+    // The per-session log is the pad diagnostic page's downloadable data:
+    // control → code → value events, app-owned sessions only.
+    let mut h = harness_with_registry(vec![registry_entry(1)]);
+    let a = addr(1);
+    let start = Instant::now();
+    h.supervisor.reconcile(start);
+    settle(&mut h.supervisor, start);
+    assert_eq!(phase_of(&h.supervisor, &addr(1)), PadPhase::Connected);
+
+    // A press crosses the seam-shaped surface: label, code, value.
+    h.radio.session_serves(&a, press(Button::Cross));
+    h.supervisor
+        .poll(start + Duration::from_millis(1_700));
+    let log = h
+        .supervisor
+        .session_log(&a)
+        .expect("app-owned session has a log");
+    let cross = log
+        .iter()
+        .find(|e| e.label == "Cross")
+        .expect("the press was recorded");
+    assert_eq!(cross.code, Some(0x130), "BTN_SOUTH beside the label");
+    assert_eq!(cross.value, 1);
+    assert_eq!(cross.seq, 1, "the first event of the session");
+    assert_eq!(cross.elapsed_ms, 1_700, "ms since the session opened");
+}
+
+#[test]
+fn session_log_is_a_bounded_ring_per_session() {
+    // Bounded: the ring keeps the most recent events, dropping the oldest.
+    let mut h = harness_with_registry(vec![registry_entry(1)]);
+    let a = addr(1);
+    let start = Instant::now();
+    h.supervisor.reconcile(start);
+    settle(&mut h.supervisor, start);
+
+    // 300 distinct stick positions: only the last 256 events survive.
+    for lx in 0..300u16 {
+        let input = PadInput {
+            lx: lx * 100,
+            ..Default::default()
+        };
+        h.radio.session_serves(&a, input);
+        h.supervisor.poll(start);
+    }
+    let log = h.supervisor.session_log(&a).unwrap();
+    assert_eq!(
+        log.len(),
+        bluepad_core::connection::SESSION_LOG_CAPACITY,
+        "the ring is bounded"
+    );
+    assert_eq!(log.first().unwrap().value, (300u16 - 256) * 100, "oldest dropped");
+    assert_eq!(log.last().unwrap().value, 299 * 100, "newest kept");
+}
+
+#[test]
+fn session_log_resets_when_a_new_session_opens() {
+    // Per-session: a reconnect starts a fresh log — stale events from the
+    // dead session never bleed into the new one.
+    let mut h = harness_with_registry(vec![registry_entry(1)]);
+    let a = addr(1);
+    let start = Instant::now();
+    h.supervisor.reconcile(start);
+    settle(&mut h.supervisor, start);
+    h.radio.session_serves(&a, press(Button::Cross));
+    h.supervisor.poll(start);
+    assert_eq!(h.supervisor.session_log(&a).unwrap().len(), 1);
+
+    // The session goes silent, the budget reconnects it.
+    h.radio.session_goes_silent(&a);
+    h.supervisor.poll(start + Duration::from_secs(1));
+    h.supervisor.poll(start + Duration::from_secs(1));
+    for second in [2u64, 3, 5, 9] {
+        h.supervisor.poll(start + Duration::from_secs(second));
+        h.supervisor.poll(start + Duration::from_secs(second));
+    }
+    assert_eq!(phase_of(&h.supervisor, &a), PadPhase::Connected, "reconnected");
+    let log = h.supervisor.session_log(&a).unwrap();
+    assert!(log.is_empty(), "the new session's log starts fresh ({log:?})");
+}
+
+#[test]
+fn session_log_is_absent_for_stock_sessions() {
+    // The pad diagnostic exists only for app-owned sessions (glossary);
+    // stock-path pads keep truthful connect-only status instead.
+    let mut h = harness_with_registry(vec![stock_entry(1)]);
+    let a = addr(1);
+    let start = Instant::now();
+    h.supervisor.reconcile(start);
+    h.radio.stock_reconnects(&a);
+    settle(&mut h.supervisor, start);
+    assert_eq!(phase_of(&h.supervisor, &a), PadPhase::Connected);
+    assert!(h.supervisor.session_log(&a).is_none());
+}
+
+// ---------------------------------------------------------------------
+// Diagnostics bundle manifest (spec: Diagnostics and observability).
+// ---------------------------------------------------------------------
+
+#[test]
+fn bundle_manifest_carries_the_environment_health_and_pseudonymized_pads() {
+    use bluepad_core::diagnostics::BUNDLE_SCHEMA_VERSION;
+    use bluepad_core::protocol::PROTOCOL_VERSION;
+
+    let mut h = harness_with_registry(vec![registry_entry(1), stock_entry(2)]);
+    let a = addr(1);
+    let start = Instant::now();
+    h.supervisor.reconcile(start);
+    settle(&mut h.supervisor, start);
+    h.radio.stock_reconnects(&addr(2));
+    settle(&mut h.supervisor, start);
+    assert_eq!(phase_of(&h.supervisor, &a), PadPhase::Connected);
+
+    // A silent blackout, then recovery: the health counters must show it.
+    h.radio.session_goes_silent(&a);
+    for second in [1u64, 2, 3, 5, 9, 15] {
+        h.supervisor.poll(start + Duration::from_secs(second));
+        h.supervisor.poll(start + Duration::from_secs(second));
+    }
+    assert_eq!(phase_of(&h.supervisor, &a), PadPhase::Connected);
+
+    let manifest = h.supervisor.bundle_manifest("0.1.0", 1_700_000_000);
+    assert_eq!(manifest.schema_version, BUNDLE_SCHEMA_VERSION);
+    assert_eq!(manifest.app_version, "0.1.0");
+    assert_eq!(manifest.protocol_version, PROTOCOL_VERSION);
+    assert_eq!(manifest.tier, PrivilegeTier::Root);
+    assert!(!manifest.capabilities.is_empty());
+
+    // Health: two pads connected now, one silent blackout survived, and
+    // the reconnect earned Connected again.
+    assert_eq!(manifest.health.connected_now, 2);
+    assert_eq!(manifest.health.recovering_now, 0);
+    assert!(manifest.health.silent_blackouts >= 1);
+    assert!(manifest.health.successful_connects >= 2);
+
+    // The registry summary is pseudonymized: kinds kept, addresses and
+    // human names never in the clear.
+    assert_eq!(manifest.pads.len(), 2);
+    assert!(manifest.pads.iter().all(|p| p.kind == PadKind::DualSense));
+    assert!(manifest
+        .pads
+        .iter()
+        .any(|p| p.phase == PadPhase::Connected && p.proven_path == Some(ConnectionPath::Stock)));
+    let json = serde_json::to_string(&manifest).unwrap();
+    assert!(!json.contains("a0:fa:9c:62:7d"), "no MAC in the clear");
+    assert!(!json.contains("a0fa9c627d"), "no normalized MAC either");
+    assert!(
+        !json.contains("DualSense Wireless Controller"),
+        "human names are dropped"
+    );
+}

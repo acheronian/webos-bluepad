@@ -16,6 +16,7 @@
 
 use crate::backoff::{Backoff, BackoffPolicy};
 use crate::bdaddr::BdAddr;
+use crate::diagnostics::{pseudonymize, BundleManifest, HealthCounters, PseudonymizedPad};
 use crate::failure::{Failure, FailureReason};
 use crate::kit::{self, Battery, OutputRequest, PadInput, PlayerIndex};
 use crate::kit::PadKitFactory;
@@ -23,7 +24,7 @@ use crate::pad::{ConnectionPath, PadIdentity, PadKind, PadPhase};
 use crate::protocol::Notification;
 use crate::protocol::{
     AppState, Capability, DiscoveryState, PairingProgress, PadStatus, PrivilegeTier,
-    RadioStatus, AdapterState,
+    RadioStatus, AdapterState, SessionLogEntry,
 };
 use crate::registry::{PadRegistry, PairingProvenance, RegistryEntry};
 use crate::settings::SettingsStore;
@@ -47,6 +48,9 @@ pub const STAGGER: Duration = Duration::from_secs(1);
 /// pad the stack auto-connects on wake is adopted — the stock path's
 /// pad-initiated accept (user story 16).
 pub const PARKED_PRESENCE_INTERVAL: Duration = Duration::from_secs(5);
+/// The per-session input log's bound: a ring of the most recent control →
+/// code → value events (spec: Pad diagnostic).
+pub const SESSION_LOG_CAPACITY: usize = 256;
 
 /// Why the supervisor wants to talk to a pad soon (scheduled work).
 #[derive(Clone, Copy)]
@@ -69,6 +73,10 @@ struct PadMachine {
     player_index: Option<PlayerIndex>,
     battery: Option<Battery>,
     last_input: PadInput,
+    /// The per-session input log: newest at the back, bounded ring.
+    session_log: std::collections::VecDeque<SessionLogEntry>,
+    session_seq: u64,
+    session_started: Option<Instant>,
 }
 
 impl PadMachine {
@@ -83,6 +91,9 @@ impl PadMachine {
             player_index: None,
             battery: None,
             last_input: PadInput::default(),
+            session_log: std::collections::VecDeque::new(),
+            session_seq: 0,
+            session_started: None,
         }
     }
 
@@ -98,6 +109,49 @@ impl PadMachine {
     fn session_is_app_owned(&self) -> bool {
         matches!(&self.session, Some(s) if s.path() == ConnectionPath::AppOwned)
             && self.phase == PadPhase::Connected
+    }
+
+    /// Open the per-session input log: a fresh session starts a fresh log
+    /// and a fresh parsed state (the dead session's last report is not
+    /// this session's baseline).
+    fn open_session_log(&mut self, now: Instant) {
+        self.session_log.clear();
+        self.session_seq = 0;
+        self.session_started = Some(now);
+        self.last_input = PadInput::default();
+    }
+
+    /// Record one input report's control → code → value events: every
+    /// reading whose value changed since the previous report.
+    fn record_session_log(&mut self, previous: &PadInput, input: &PadInput, now: Instant) {
+        let Some(started) = self.session_started else {
+            return;
+        };
+        let Some(kit) = kit::factory().kit(self.entry.kind, ConnectionPath::AppOwned) else {
+            return;
+        };
+        let elapsed_ms = now.duration_since(started).as_millis() as u64;
+        let before = kit.diagnostic_readings(previous);
+        let after = kit.diagnostic_readings(input);
+        for reading in after {
+            let unchanged = before
+                .iter()
+                .any(|p| p.label == reading.label && p.value == reading.value);
+            if unchanged {
+                continue;
+            }
+            self.session_seq += 1;
+            self.session_log.push_back(SessionLogEntry {
+                seq: self.session_seq,
+                elapsed_ms,
+                label: reading.label.to_string(),
+                code: reading.code,
+                value: reading.value,
+            });
+            if self.session_log.len() > SESSION_LOG_CAPACITY {
+                self.session_log.pop_front();
+            }
+        }
     }
 
     /// Leaving Connected always tears the session down (the input node is
@@ -151,6 +205,9 @@ pub struct Supervisor {
     pairing: Option<PairingWindow>,
     tier: PrivilegeTier,
     now: Instant,
+    /// Runtime health counters for the diagnostics bundle (spec:
+    /// Diagnostics and observability).
+    health: HealthCounters,
 }
 
 /// What happened during a poll, for the daemon shell to broadcast.
@@ -175,6 +232,7 @@ impl Supervisor {
             pairing: None,
             tier,
             now: Instant::now(),
+            health: HealthCounters::default(),
         }
     }
 
@@ -400,6 +458,7 @@ impl Supervisor {
                 };
                 match verdict {
                     HealthVerdict::Healthy => {
+                        self.health.successful_connects += 1;
                         if let Some(machine) = self.pads.get_mut(address) {
                             machine.phase = PadPhase::Connected;
                             machine.failure = None;
@@ -415,6 +474,11 @@ impl Supervisor {
                         notifications.push(self.notify_pad(address));
                     }
                     HealthVerdict::Lost | HealthVerdict::Silent => {
+                        if verdict == HealthVerdict::Silent {
+                            self.health.silent_blackouts += 1;
+                        } else {
+                            self.health.session_losses += 1;
+                        }
                         if let Some(machine) = self.pads.get_mut(address) {
                             machine.leave_connected();
                             machine.phase = PadPhase::Recovering;
@@ -453,6 +517,7 @@ impl Supervisor {
                         }
                     }
                     HealthVerdict::Silent => {
+                        self.health.silent_blackouts += 1;
                         if let Some(machine) = self.pads.get_mut(address) {
                             machine.phase = PadPhase::Recovering;
                             machine.failure = Some(Failure::new(
@@ -465,6 +530,7 @@ impl Supervisor {
                         notifications.push(self.notify_pad(address));
                     }
                     HealthVerdict::Lost => {
+                        self.health.session_losses += 1;
                         if let Some(machine) = self.pads.get_mut(address) {
                             machine.phase = PadPhase::Recovering;
                             machine.failure = Some(Failure::new(
@@ -495,15 +561,27 @@ impl Supervisor {
         }
         if let Some(input) = update {
             if let Some(machine) = self.pads.get_mut(address) {
+                let previous = machine.last_input;
                 machine.last_input = input;
                 if let Some(battery) = input.battery {
                     machine.battery = Some(battery);
+                }
+                // The per-session input log rides the app-owned session's
+                // parsed reports (spec: Pad diagnostic).
+                let session_is_app_owned = machine
+                    .session
+                    .as_ref()
+                    .map(|s| s.path() == ConnectionPath::AppOwned)
+                    .unwrap_or(false);
+                if session_is_app_owned {
+                    machine.record_session_log(&previous, &input, now);
                 }
             }
         }
         if failed {
             if let Some(machine) = self.pads.get_mut(address) {
                 if machine.phase == PadPhase::Connected {
+                    self.health.session_losses += 1;
                     machine.phase = PadPhase::Recovering;
                     machine.failure = Some(Failure::new(
                         FailureReason::SessionLost,
@@ -598,9 +676,11 @@ impl Supervisor {
                     machine.session = Some(session);
                     machine.entry.proven_path = Some(path);
                     machine.scheduled = None;
+                    machine.open_session_log(self.now);
                 }
             }
             Err(error) => {
+                self.health.connect_failures += 1;
                 if let Some(machine) = self.pads.get_mut(address) {
                     machine.phase = PadPhase::Recovering;
                     machine.failure = Some(Failure::new(error.reason, error.detail));
@@ -862,6 +942,17 @@ impl Supervisor {
         self.send_output(address, &request)
     }
 
+    /// The per-session input log — the pad diagnostic page's downloadable
+    /// control → code → value events (user story 31). App-owned sessions
+    /// only, like the live diagnostic it sits beside.
+    pub fn session_log(&self, address: &BdAddr) -> Option<Vec<SessionLogEntry>> {
+        let machine = self.pads.get(address)?;
+        if !machine.session_is_app_owned() {
+            return None;
+        }
+        Some(machine.session_log.iter().cloned().collect())
+    }
+
     /// The live pad diagnostic: the daemon's parsed HID state
     /// (user story 30). App-owned sessions only.
     pub fn diagnostics(&self, address: &BdAddr) -> Option<Vec<kit::Reading>> {
@@ -1011,12 +1102,66 @@ impl Supervisor {
             Capability::PadSettings,
             Capability::RumbleTest,
             Capability::Diagnostics,
+            Capability::SessionLog,
+            Capability::DiagnosticsExport,
             Capability::GlobalToggle,
         ]
     }
 
     pub fn tier(&self) -> PrivilegeTier {
         self.tier
+    }
+
+    /// Every address in the pad registry — the known set the diagnostics
+    /// bundle scrubs from its logs (no MAC in the clear).
+    pub fn registry_addresses(&self) -> Vec<BdAddr> {
+        self.registry
+            .entries()
+            .map(|entry| entry.identity.address)
+            .collect()
+    }
+
+    /// The diagnostics bundle's manifest: the environment snapshot, the
+    /// runtime health counters, and the pseudonymized registry summary
+    /// (glossary: Diagnostics bundle). Anonymization is part of the
+    /// format — addresses are hashed/truncated here, names dropped.
+    pub fn bundle_manifest(
+        &self,
+        app_version: &str,
+        generated_unix: u64,
+    ) -> BundleManifest {
+        let mut health = self.health;
+        health.connected_now = self.connected_count() as u8;
+        health.recovering_now = self
+            .pads
+            .values()
+            .filter(|m| m.phase == PadPhase::Recovering)
+            .count() as u8;
+        let pads = self
+            .registry
+            .entries()
+            .map(|entry| PseudonymizedPad {
+                id: pseudonymize(&entry.identity.address),
+                kind: entry.kind,
+                phase: self
+                    .pads
+                    .get(&entry.identity.address)
+                    .map(|m| m.phase)
+                    .unwrap_or(PadPhase::Paired),
+                proven_path: entry.proven_path,
+                provenance: entry.provenance.clone(),
+            })
+            .collect();
+        BundleManifest {
+            schema_version: crate::diagnostics::BUNDLE_SCHEMA_VERSION,
+            app_version: app_version.to_string(),
+            protocol_version: crate::protocol::PROTOCOL_VERSION,
+            generated_unix,
+            tier: self.tier,
+            capabilities: self.capabilities(),
+            health,
+            pads,
+        }
     }
 
     pub fn settings_store(&self) -> &SettingsStore {

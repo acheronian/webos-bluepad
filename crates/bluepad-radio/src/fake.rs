@@ -52,6 +52,7 @@ struct SessionInner {
     closed: bool,
     outputs: Vec<Vec<u8>>,
     reports_served: usize,
+    input: PadInput,
 }
 
 /// A fake session: streams inputs (or silence), records outputs and closes.
@@ -105,6 +106,12 @@ impl FakeSession {
     pub fn reports_served(&self) -> usize {
         self.inner.lock().unwrap().reports_served
     }
+
+    /// Script the parsed input this session serves on every poll (the
+    /// per-session input log's data source).
+    pub fn serves(&self, input: PadInput) {
+        self.inner.lock().unwrap().input = input;
+    }
 }
 
 impl HidSession for FakeSession {
@@ -116,7 +123,7 @@ impl HidSession for FakeSession {
         let mut inner = self.inner.lock().unwrap();
         if inner.flowing && !inner.closed {
             inner.reports_served += 1;
-            Ok(Some(PadInput::default()))
+            Ok(Some(inner.input))
         } else {
             Ok(None)
         }
@@ -258,6 +265,16 @@ impl FakeRadio {
     pub fn stock_paired(&self, identity: PadIdentity) {
         self.with(|r| {
             r.paired.insert(identity.address);
+        });
+    }
+
+    /// Script the parsed input a pad's live session serves on every poll
+    /// (the per-session input log's data source).
+    pub fn session_serves(&self, address: &BdAddr, input: PadInput) {
+        self.with(|r| {
+            if let Some(s) = r.sessions.get(address) {
+                s.serves(input);
+            }
         });
     }
 

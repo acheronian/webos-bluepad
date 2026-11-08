@@ -10,6 +10,7 @@
 pub mod logging;
 
 use bluepad_core::connection::Supervisor;
+use bluepad_core::diagnostics::{DiagnosticsBundle, DiagnosticsFile};
 use bluepad_core::protocol::{
     ClientMessage, Notification, PairingProgress, PrivilegeTier, Request, Response,
     ServerMessage, PROTOCOL_VERSION,
@@ -21,6 +22,52 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::broadcast;
 
+/// What the request dispatcher needs besides the supervisor: the daemon's
+/// own version and the tier-homed dir its rotated logs live in (the
+/// diagnostics bundle reads them at export time).
+#[derive(Clone, Debug)]
+pub struct DaemonInfo {
+    pub version: String,
+    pub logs_dir: PathBuf,
+}
+
+impl DaemonInfo {
+    pub fn new(version: impl Into<String>, logs_dir: impl Into<PathBuf>) -> DaemonInfo {
+        DaemonInfo {
+            version: version.into(),
+            logs_dir: logs_dir.into(),
+        }
+    }
+}
+
+/// Assemble the anonymized diagnostics bundle: the supervisor's manifest
+/// (environment snapshot, health counters, pseudonymized registry) plus
+/// the rotated daemon logs (spec: Diagnostics and observability).
+pub fn assemble_bundle(supervisor: &mut Supervisor, info: &DaemonInfo) -> DiagnosticsBundle {
+    let generated_unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let manifest = supervisor.bundle_manifest(&info.version, generated_unix);
+    let known = supervisor.registry_addresses();
+    // Rotated logs: bluepad.log, .1, .2 — newest first, absent ones
+    // skipped, MACs scrubbed (no address survives in the clear).
+    let mut files = Vec::new();
+    for (file, bundle_name) in [
+        ("bluepad.log", "logs/bluepad-daemon.log"),
+        ("bluepad.log.1", "logs/bluepad-daemon.log.1"),
+        ("bluepad.log.2", "logs/bluepad-daemon.log.2"),
+    ] {
+        if let Ok(content) = std::fs::read(info.logs_dir.join(file)) {
+            files.push(DiagnosticsFile {
+                name: bundle_name.into(),
+                content: bluepad_core::diagnostics::scrub_macs(&content, &known),
+            });
+        }
+    }
+    DiagnosticsBundle { manifest, files }
+}
+
 /// Default poll cadence: drives health checks, backoff, pairing windows.
 pub const DEFAULT_POLL_INTERVAL: Duration = Duration::from_millis(200);
 
@@ -30,15 +77,7 @@ pub type SharedSupervisor = Arc<Mutex<Supervisor>>;
 /// Handle one request against the supervisor (the Facade). Public so the
 /// seam tests can drive the dispatcher directly as well as through the
 /// socket.
-pub fn dispatch(supervisor: &SharedSupervisor, request: Request) -> Response {
-    dispatch_versioned(supervisor, env!("CARGO_PKG_VERSION"), request)
-}
-
-pub fn dispatch_versioned(
-    supervisor: &SharedSupervisor,
-    daemon_version: &str,
-    request: Request,
-) -> Response {
+pub fn dispatch(supervisor: &SharedSupervisor, info: &DaemonInfo, request: Request) -> Response {
     let mut sup = supervisor.lock().unwrap();
     match request {
         Request::Hello { protocol_version } => {
@@ -48,7 +87,7 @@ pub fn dispatch_versioned(
                 };
             }
             Response::Hello {
-                daemon_version: daemon_version.to_string(),
+                daemon_version: info.version.clone(),
                 protocol_version: PROTOCOL_VERSION,
                 tier: sup.tier(),
                 capabilities: sup.capabilities(),
@@ -105,6 +144,16 @@ pub fn dispatch_versioned(
                 message: "pad diagnostic is available for BluePad sessions only".into(),
             },
         },
+        Request::GetSessionLog { address } => match sup.session_log(&address) {
+            Some(entries) => Response::SessionLog(entries),
+            None => Response::Error {
+                message: "the session log is available for BluePad sessions only".into(),
+            },
+        },
+        Request::ExportDiagnostics => {
+            let bundle = assemble_bundle(&mut sup, info);
+            Response::DiagnosticsBundle(bundle)
+        }
         Request::Subscribe | Request::Unsubscribe => Response::Ok,
     }
 }
@@ -115,16 +164,19 @@ pub struct Daemon {
     socket_path: PathBuf,
     notifications: broadcast::Sender<Notification>,
     poll_interval: Duration,
-    daemon_version: String,
+    info: DaemonInfo,
 }
 
 impl Daemon {
     /// Prepare the socket seam. The socket lives in the app dir so the
     /// jailed UI can reach it without privileges; a previous daemon's
-    /// socket (postinst restarts, crashes) is replaced.
+    /// socket (postinst restarts, crashes) is replaced. `logs_dir` is the
+    /// tier-homed dir the rotated logs live in — the diagnostics bundle
+    /// reads them at export time.
     pub fn bind(
         supervisor: Supervisor,
         socket_path: impl Into<PathBuf>,
+        logs_dir: impl Into<PathBuf>,
     ) -> std::io::Result<Daemon> {
         let socket_path = socket_path.into();
         if socket_path.exists() {
@@ -139,7 +191,7 @@ impl Daemon {
             socket_path,
             notifications,
             poll_interval: DEFAULT_POLL_INTERVAL,
-            daemon_version: env!("CARGO_PKG_VERSION").to_string(),
+            info: DaemonInfo::new(env!("CARGO_PKG_VERSION"), logs_dir),
         })
     }
 
@@ -148,6 +200,7 @@ impl Daemon {
     pub fn bind_shared(
         supervisor: SharedSupervisor,
         socket_path: impl Into<PathBuf>,
+        logs_dir: impl Into<PathBuf>,
     ) -> std::io::Result<Daemon> {
         let socket_path = socket_path.into();
         if socket_path.exists() {
@@ -162,7 +215,7 @@ impl Daemon {
             socket_path,
             notifications,
             poll_interval: DEFAULT_POLL_INTERVAL,
-            daemon_version: env!("CARGO_PKG_VERSION").to_string(),
+            info: DaemonInfo::new(env!("CARGO_PKG_VERSION"), logs_dir),
         })
     }
 
@@ -216,7 +269,7 @@ impl Daemon {
 
         let supervisor = self.supervisor.clone();
         let notifications = self.notifications.clone();
-        let daemon_version = self.daemon_version.clone();
+        let info = self.info.clone();
         let server = tokio::task::spawn(async move {
             loop {
                 let (stream, _) = match listener.accept().await {
@@ -225,9 +278,9 @@ impl Daemon {
                 };
                 let supervisor = supervisor.clone();
                 let notifications = notifications.clone();
-                let daemon_version = daemon_version.clone();
+                let info = info.clone();
                 tokio::task::spawn(async move {
-                    serve_connection(stream, supervisor, notifications, daemon_version).await;
+                    serve_connection(stream, supervisor, notifications, info).await;
                 });
             }
         });
@@ -250,7 +303,7 @@ async fn serve_connection(
     stream: UnixStream,
     supervisor: SharedSupervisor,
     notifications: broadcast::Sender<Notification>,
-    daemon_version: String,
+    info: DaemonInfo,
 ) {
     let (read_half, mut write_half) = stream.into_split();
     let mut lines = BufReader::new(read_half).lines();
@@ -314,7 +367,7 @@ async fn serve_connection(
                             }
                             Request::StartPairing => {
                                 let response =
-                                    dispatch_versioned(&supervisor, &daemon_version, Request::StartPairing);
+                                    dispatch(&supervisor, &info, Request::StartPairing);
                                 if matches!(response, Response::Ok) {
                                     // The pairing sheet opens on the Discovering
                                     // phase (modal, bounded).
@@ -328,9 +381,9 @@ async fn serve_connection(
                                 }
                             }
                             Request::ForgetPad { address } => {
-                                let response = dispatch_versioned(
+                                let response = dispatch(
                                     &supervisor,
-                                    &daemon_version,
+                                    &info,
                                     Request::ForgetPad { address },
                                 );
                                 if matches!(response, Response::Ok) {
@@ -346,9 +399,9 @@ async fn serve_connection(
                                 }
                             }
                             Request::SetPadSettings { address, settings } => {
-                                let response = dispatch_versioned(
+                                let response = dispatch(
                                     &supervisor,
-                                    &daemon_version,
+                                    &info,
                                     Request::SetPadSettings { address, settings },
                                 );
                                 if matches!(response, Response::Ok) {
@@ -372,8 +425,7 @@ async fn serve_connection(
                                 }
                             }
                             other => {
-                                let response =
-                                    dispatch_versioned(&supervisor, &daemon_version, other);
+                                let response = dispatch(&supervisor, &info, other);
                                 let message = ServerMessage::Response { id, response };
                                 if write_message(&mut write_half, &message).await.is_err() {
                                     break;
