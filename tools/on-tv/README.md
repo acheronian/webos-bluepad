@@ -43,18 +43,39 @@ tools/on-tv/deploy.sh
 
 The script pushes both binaries to `/tmp/bluepad/` on the TV, starts the
 daemon as root, prints the log tail and the UI state view, and leaves the
-daemon running for interactive poking:
+daemon running for interactive poking.
+
+### The UI binary's smoke-test commands
 
 ```
-# on the TV:
-BLUEPAD_SOCKET=/tmp/bluepad/bluepad.sock /tmp/bluepad/bluepad-ui
+# on the TV (BLUEPAD_SOCKET=/tmp/bluepad/bluepad.sock is set by deploy.sh):
+bluepad-ui state             # the state view (default)
+bluepad-ui watch            # subscribe; print seam notifications live
+bluepad-ui pair             # open the pairing window; print progress
+bluepad-ui cancel            # cancel the pairing window
+bluepad-ui forget <addr>    # remove a pad (registry + settings)
+bluepad-ui rumble <addr>    # rumble test pulse
+bluepad-ui diag <addr>       # pad diagnostic readings (app-owned pads)
 ```
 
-Pairing can be driven by hand over the seam (JSON lines on the socket):
+### What to look for, per test
 
-```
-{"type":"request","id":1,"payload":{"type":"start_pairing"}}
-```
+1. **Tier probe**: `state` shows `tier Root` — the capability probe
+   reached `luna-send` and the stock adapter answered.
+2. **Stock adapter parsing**: with previously-stock-paired pads on the TV,
+   `pair` a pad and watch `[pad]` notifications; `state` then lists it
+   with its name, kind (`DualSense`), and truthful phase.
+3. **Pairing flow bounds**: `pair` with no pad in pairing mode must end
+   in a visible `DiscoveryTimeout` failure after 60 s — never churn.
+4. **Truthful connect**: after a successful `hid/connect`, the pad shows
+   `Connected` only while the stack's presence view says so; pull the
+   pad's battery and watch it flip to `Reconnecting` (stock health is
+   presence-consistency).
+5. **Forget**: `forget <addr>` removes the pad; `state` no longer lists
+   it, and `/tmp/bluepad/registry.json` loses the entry.
+6. **Honest refusals**: `diag <addr>` on a stock-path pad refuses with
+   the BluePad-sessions-only message; `rumble <addr>` likewise reports
+   that the stock path cannot send outputs.
 
 ## Safety notes
 
