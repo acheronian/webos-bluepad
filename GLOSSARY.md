@@ -88,3 +88,11 @@ _Avoid_: Calling it "the logs" (it is more than logs), or a bug report (it feeds
 **Radio status**:
 The curated, closed set of health signals the radio-status card renders — daemon liveness and tier, adapter presence and activity, contention and discovery state, and the aggregate pad summary — pushed over the UI↔daemon seam, never scraped from logs.
 _Avoid_: Raw log tailing in the UI
+
+**Player index**:
+The connect-order slot (1–4) the connection daemon assigns a pad automatically; drives the lightbar's player color and the DualSense player-LED pattern. A manual LED pattern overrides only what the pad displays, never its index.
+_Avoid_: Treating it as a user-settable value
+
+**Connection feedback**:
+The optional pad-side acknowledgement of a true connection: a rumble pulse and lightbar flash on entering Connected, and a farewell pulse on Forget. Scaled by the pad's own settings; never fires on pad-initiated disconnects.
+_Avoid_: Confusing it with game-driven rumble (impossible through uhid on the 4.4 kernel)
