@@ -29,6 +29,7 @@ version = "0.1.0"
 dependencies = [
  "bluepad-core",
  "libc",
+ "serde_json",
 ]
 
 [[package]]
@@ -37,6 +38,7 @@ version = "0.1.0"
 dependencies = [
  "bluepad-core",
  "serde_json",
+ "thiserror",
 ]
 
 [[package]]

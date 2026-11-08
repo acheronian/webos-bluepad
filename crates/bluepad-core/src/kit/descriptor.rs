@@ -40,6 +40,12 @@ impl DescriptorDirector {
     }
 }
 
+impl Default for DescriptorDirector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Generic Desktop usages used by the authored descriptor.
 #[derive(Clone, Copy)]
 pub enum GdUsage {

@@ -235,7 +235,7 @@ impl Supervisor {
             None => return,
         };
         match step {
-            Step::Terminal => return,
+            Step::Terminal => (),
             Step::Discovering => {
                 let expired = self
                     .pairing

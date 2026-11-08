@@ -264,10 +264,12 @@ mod tests {
         let addr: BdAddr = "a0:fa:9c:62:7d:1a".parse().unwrap();
 
         let mut store = SettingsStore::load(&p);
-        let mut pad = PadSettings::default();
-        pad.rumble = RumbleIntensity::High;
-        pad.lightbar_mode = LightbarMode::Fixed;
-        pad.lightbar_color = Lightbar { red: 0xFF, green: 0, blue: 0 };
+        let pad = PadSettings {
+            rumble: RumbleIntensity::High,
+            lightbar_mode: LightbarMode::Fixed,
+            lightbar_color: Lightbar { red: 0xFF, green: 0, blue: 0 },
+            ..PadSettings::default()
+        };
         store.set_pad(&addr, pad).unwrap();
 
         // A fresh store reads the same values back.
@@ -333,8 +335,10 @@ mod tests {
 
     #[test]
     fn rumble_intensity_scales_pulses() {
-        let mut s = PadSettings::default();
-        s.rumble = RumbleIntensity::Off;
+        let mut s = PadSettings {
+            rumble: RumbleIntensity::Off,
+            ..PadSettings::default()
+        };
         assert!(!s.feedback_enabled());
         assert_eq!(s.pulse_rumble().low, 0);
         s.rumble = RumbleIntensity::High;

@@ -79,7 +79,6 @@ mod tests {
         // Five attempts total: the first four failures schedule retries
         // (1, 2, 4, 8 s), the fifth parks the pad.
         let mut b = Backoff::new(BackoffPolicy::default());
-        ;
         assert_eq!(b.next_delay(), Some(Duration::from_secs(1)));
         assert_eq!(b.next_delay(), Some(Duration::from_secs(2)));
         assert_eq!(b.next_delay(), Some(Duration::from_secs(4)));

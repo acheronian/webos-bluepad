@@ -110,7 +110,7 @@ fn daemon_restart_reconciles_registry_pads_staggered() {
 fn connected_requires_health_checked_input() {
     // A session that comes up but streams nothing is Recovering, never
     // Connected (story 3; the silent-blackout specimen).
-    let mut h = harness_with_registry(vec![stock_entry(1)]);
+    let h = harness_with_registry(vec![stock_entry(1)]);
     h.radio.inject_app_owned(&addr(1), vec![bluepad_radio::fake::Injected::Silent]);
     // Force the app-owned path by clearing the proven path in the registry
     // the supervisor loaded: instead, just use an unproven entry.
